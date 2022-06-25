@@ -1,0 +1,4 @@
+# 工作空间 变成 monorepo的环境
+# 指定所有的包都在packages下面
+packages:
+  - "packages/*"
