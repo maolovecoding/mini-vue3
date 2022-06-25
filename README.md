@@ -1,6 +1,6 @@
 # mini-vue3
 
-##  Vue设计思想
+## Vue设计思想
 
 - Vue3.0更注重模块上的拆分，在2.0中无法单独使用部分模块。需要引入完整的Vuejs(例如只想使用使用响应式部分，但是需要引入完整的Vuejs)， Vue3中的模块之间耦合度低，模块可以独立使用。 **拆分模块**
 - Vue2中很多方法挂载到了实例中导致没有使用也会被打包（还有很多组件也是一样）。通过构建工具Tree-shaking机制实现按需引入，减少用户打包后体积。 **重写API**
@@ -62,8 +62,6 @@ const vnode = {
 - 我们需要有一个虚拟DOM，调用渲染方法将虚拟DOM渲染成真实DOM （缺点就是虚拟DOM编写麻烦）
 - 专门写个编译时可以将模板编译成虚拟DOM （在构建的时候进行编译性能更高，不需要再运行的时候进行编译，而且vue3在编译中做了很多优化）
 
-
-
 ## Vue3 架构
 
 ### Monorepo 管理项目
@@ -76,8 +74,6 @@ Monorepo 是管理项目代码的一个方式，指在一个项目仓库(repo)�
 ### Vue3采用Typescript
 
 > Vue2 采用Flow来进行类型检测 （Vue2中对TS支持并不友好）， Vue3源码采用Typescript来进行重写 , 对Ts的支持更加友好。
-
-
 
 ## vue的开发环境搭建
 
@@ -100,8 +96,6 @@ shamefully-hoist = true
 这里您可以尝试一下安装`Vue3`, `pnpm install vue@next`此时默认情况下`vue3`中依赖的模块不会被提升到`node_modules`下。 添加**羞耻的提升**可以将Vue3，所依赖的模块提升到`node_modules`中。
 
 **可以这样理解，我们加入安装了koa框架，而koa框架如果用到了connect模块，安装的时候肯定是会一起下载下来的，如是用npm安装，我们就可以直接使用connect模块的东西，但是如果哪天koa框架升级不再依赖该模块，就会导致我们用不成connect模块了，也就是突然消失了。**
-
-
 
 ### 配置workspace
 
@@ -133,12 +127,6 @@ pnpm install vue
 ```shell
 pnpm i vue -w
 ```
-
-
-
-
-
-
 
 ## 环境搭建
 
@@ -404,3 +392,341 @@ async function build(target) {
 }
 runParallel(targets, build)
 ```
+
+## 简易版的reactive的实现
+
+- 实现对对象的代理
+- 一个对象只会代理一次，多次代理返回的是同一个对象
+- 对已经是代理对象的对象进行代理，返回值还是代理对象本身
+- 利用的就是代理对象在取值时会触发get钩子，我们只需要在代理对象触发get钩子的时候，直接返回代理对象即可。
+- 此时还没有实现对象属性的二次代理，如果属性值是对象，不会创建代理对象
+
+```ts
+import { isObject } from "@vue/shared";
+
+/*
+ * @Author: 毛毛
+ * @Date: 2022-06-25 13:50:54
+ * @Last Modified by: 毛毛
+ * @Last Modified time: 2022-06-25 16:56:53
+ */
+// 缓存已经代理过后的响应式对象
+const reactiveMap = new WeakMap();
+
+const enum ReactiveFlags {
+  IS_REACTIVE = "__v_isReactive",
+}
+/**
+ * 代理对象为响应式
+ * @param obj
+ */
+export function reactive(target: unknown) {
+  if (!isObject(target)) return;
+  const existingProxy = reactiveMap.get(target);
+  // 目标对象被代理过 返回同一个代理
+  if (existingProxy) return existingProxy;
+  // 第一个普通对象 创建代理
+  // 如果传入的对象 是已经被代理过的对象 我们可以看看这个对象是否有get方法，有表示已经是代理对象
+  if (target[ReactiveFlags.IS_REACTIVE]) {
+    // TODO 取到true 就返回自身 源码这一步很妙
+    return target;
+  }
+  // 创建代理对象
+  const proxy = new Proxy(target, {
+    get(target, key, receiver) {
+      // 用来判断是否是响应式对象
+      // 对象没有被代理之前，没有该key，如果代理对象被用来二次代理，会在上面取值，然后get走到这里，返回true了
+      if (key === ReactiveFlags.IS_REACTIVE) {
+        return true;
+      }
+      return Reflect.get(target, key, receiver);
+    },
+    set(target, key, value, receiver) {
+      const flag = Reflect.set(target, key, value, receiver);
+      return flag;
+    },
+  });
+  // 已经代理的对象进行缓存 如果再次代理同一个对象 返回同一个代理
+  reactiveMap.set(target, proxy);
+  return proxy;
+}
+```
+
+当然这样写会有点乱，我们可以把对目标对象的代理操作提取出来：
+
+**baseHandler.ts**:
+
+```ts
+/*
+ * @Author: 毛毛
+ * @Date: 2022-06-25 14:22:33
+ * @Last Modified by: 毛毛
+ * @Last Modified time: 2022-06-25 14:25:24
+ */
+
+export const enum ReactiveFlags {
+  IS_REACTIVE = "__v_isReactive",
+}
+export const mutableHandlers = {
+  get(target, key, receiver) {
+    // 用来判断是否是响应式对象
+    // 对象没有被代理之前，没有该key，如果代理对象被用来二次代理，会在上面取值，然后get走到这里，返回true了
+    if (key === ReactiveFlags.IS_REACTIVE) {
+      return true;
+    }
+    return Reflect.get(target, key, receiver);
+  },
+  set(target, key, value, receiver) {
+    const flag = Reflect.set(target, key, value, receiver);
+    return flag;
+  },
+} as ProxyHandler<object>;
+
+```
+
+这样看起来更清晰。
+
+## 实现简易版的effect
+
+该API函数是来收集副作用的。参数是一个函数，当我们函数内使用的变量的值发生改变，会让这个副作用函数重新执行。
+
+这里，我们需要定义一个ReactiveEffect类，也就是响应式的副作用函数，用来记录用户传入的副作用函数，并对其进行一些列扩展，毕竟我们不能随意修改用户传入的函数嘛。
+
+```ts
+/*
+ * @Author: 毛毛
+ * @Date: 2022-06-25 14:00:05
+ * @Last Modified by: 毛毛
+ * @Last Modified time: 2022-06-25 14:44:53
+ */
+/**
+ * 传入的副作用函数类型
+ */
+type effectFn = () => any;
+export function effect(fn: effectFn) {
+  // 创建响应式的effect
+  const _effect = new ReactiveEffect(fn);
+  // 默认先执行一次副作用函数
+  const res = _effect.run();
+  return res;
+}
+/**
+ * 当前正在执行副作用函数暴露出去
+ */
+export let activeEffect: ReactiveEffect = null;
+/**
+ * 把副作用函数包装为响应式的effect函数
+ */
+export class ReactiveEffect {
+  /**
+   * 这个effect默认是激活状态
+   *
+   * @memberof ReactiveEffect
+   */
+  active = true;
+  constructor(public fn: effectFn) {}
+  /**
+   *
+   * run 方法 就是执行传入的副作用函数
+   * @memberof ReactiveEffect
+   */
+  run() {
+    let res;
+    // 激活状态 才需要收集这个副作用函数fn内用到的响应式数据 也就是我们说的依赖收集
+    // 非激活状态 只执行函数 不收集依赖
+    if (!this.active) {
+      res = this.fn();
+    }
+    try {
+      // 激活状态 依赖收集了 核心就是将当前的effect和稍后渲染的属性关联在一起
+      activeEffect = this;
+      // 执行传入的fn的时候，如果出现了响应式数据的获取操作，就可以获取到这个全局的activeEffect
+      res = this.fn();
+    } finally {
+      activeEffect = null;
+    }
+    return res;
+  }
+  /**
+   * 取消副作用函数的激活 不再收集依赖
+   */
+  stop() {
+    this.active = false;
+  }
+}
+```
+
+此时，虽然我们还没开始进行依赖收集，但是如果使用effect函数，是正常执行用户传入的函数逻辑的。
+
+![image-20220625145035515](README.assets/image-20220625145035515.png)
+
+但是，如果我们在effect中再次嵌套effect，此时可以发现，当我们内层的effect结束之后，会回到外层的effect，此时的activeEffect变量的值并不会指回外层的effect对象。
+
+```ts
+effect(()=>{
+    console.log(obj.name)
+    effect(()=>{
+        console.log(obj)
+    })
+    // .... 来到这里 activeEffect 变成 null 了
+})
+```
+
+所以我们可以修改记录当前正在执行的可响应式副作用对象的变量为一个栈结构。
+
+```ts
+let activeEffect:ReactiveEffect[] = []
+```
+
+每次执行effect的时候，都关联栈中的最后一个元素，执行完当前的副作用函数就弹出，这样内层effect执行完，栈中的最后一个元素还是指向当前正在执行的effect
+
+**在vue3.0版本的时候，的确就是采用栈结构来实现的。**
+
+但是在最新的3.2版本，又做了一些更改。因为栈结构也是比较消耗性能的。
+
+**最新的策略是采用了类似树结构的形式，每个ReactiveEffect对象，都记录自己父ReactiveEffect对象**，让activeEffect变量依然指向自身，当自己执行完毕以后，将activeEffect的值指向自己的parent属性，也就是父节点，就实现了在嵌套执行effect的时候，不会弄丢activeEffect指向的问题。
+
+可以这样做，主要还是依赖了js是单线程。
+
+```ts
+export class ReactiveEffect {
+  /**
+   * 记录父ReactiveEffect
+   *
+   * @type {ReactiveEffect}
+   * @memberof ReactiveEffect
+   */
+  parent: ReactiveEffect = null;
+ // ...
+  run() {
+ // ...
+    try {
+      // 激活状态 依赖收集了 核心就是将当前的effect和稍后渲染的属性关联在一起
+      this.parent = activeEffect
+      activeEffect = this;
+      // 执行传入的fn的时候，如果出现了响应式数据的获取操作，就可以获取到这个全局的activeEffect
+      res = this.fn();
+    } finally {
+      // 执行完当前的effect 归还上次 activeEffect 变量指向的值
+      activeEffect = this.parent;
+        this.parent = null
+    }
+    return res;
+  }
+}
+```
+
+### 依赖收集
+
+实现了reactive和effect函数，接下来就是进行依赖收集。
+
+在副作用函数中，我们如果进行了对响应式数据的取值操作，就会触发get，来到get钩子里，就可以进行对当前对象的当前属性收集正在执行的副作用函数。
+
+也就是说：
+
+```js
+当前对象 -> 取值get -> key -> effects
+```
+
+一个对象有多个属性，每个属性又可能在多个effect中使用，所以一个key对应多个effect，而且应该保证key对应的effect是不重复的（重复的副作用函数有必要吗？很明显没必要）
+
+因此：我们得出可以使用map结构来记录对象和key的关系，用set来记录每个key和effects关系。
+
+![image-20220625153756490](README.assets/image-20220625153756490.png)
+
+我们只需要这样做，就可以完成三者之间的映射关系。
+
+但是，有时候我们在触发副作用函数的执行的时候，可以会出现需要清理副作用函数的情况：
+
+比如：
+
+![image-20220625154135866](README.assets/image-20220625154135866.png)
+
+这种情况再触发副作用函数执行以后，第二次外层副作用函数不会再次取age属性值，也就是说在最新执行完本次的副作用函数以后，我们的age对应的effects集合里面不应该包含外层的effect函数，只应该包含内存的effect
+
+因此：我们可以修改一下ReactEffect，让每个effect响应式副作用的对象也收集一下自己用到的属性：
+
+```ts
+deps: Set<ReactiveEffect>[] = [];
+```
+
+也就是说，属性知道那些effect用到了自己，而effect对象也知道自己用到了那些属性。也就是多对多的映射。方便我们进行清理操作。
+
+![image-20220625155959638](README.assets/image-20220625155959638.png)
+
+为了便于理解，这里我们最好是把deps改为dep.
+
+![image-20220625160245064](README.assets/image-20220625160245064.png)
+
+至此，我们就完成了依赖收集。下一步就是在响应式数据发生改变的情况下，重新执行副作用函数。
+
+### 触发更新
+
+我们只需要在修改值的时候，也就是触发了代理对象的set操作，在这里进行触发更新，也就是在更新值以后，触发副作用函数的重新执行。
+
+```ts
+/**
+ * 触发更新
+ * @param target
+ * @param type 操作类型
+ * @param key
+ * @param value
+ * @param oldValue
+ */
+export const trigger = (
+  target: object,
+  type: Operator,
+  key: keyof any,
+  value: unknown,
+  oldValue: unknown
+) => {
+  const depsMap = targetMap.get(target);
+  if (!depsMap) {
+    // 在模板中 没有用过这个对象
+    return;
+  }
+  // 拿到属性对应的set effects
+  const effects = depsMap.get(key);
+  effects && effects.forEach((effect) => effect.run());
+};
+```
+
+此时我们可以看见，在一秒之后，浏览器再次执行了这个副作用函数：
+
+```js
+const { effect, reactive } = VueReactivity
+const obj = reactive({
+    name: "张三",
+    address: [1],
+    age: 22
+})
+let flag = true
+effect(() => {
+    console.log(obj.name)
+    effect(() => {
+        console.log(obj.age)
+    })
+    if (flag) {
+        console.log(obj.age)
+        flag = false
+    }
+})
+setTimeout(()=>{
+    obj.name = '12'
+},1000)
+
+```
+
+而且，如果我们给这个对象修改address或者新增属性等，是不会触发副作用函数的执行的。
+
+**但是：如果你在effect函数中修改了当前正在触发设值操作的属性，比如外面修改了age，我在effect函数中又修改了age**，很明显，会触发爆栈操作，无限循环 了
+
+![image-20220625164527019](README.assets/image-20220625164527019.png)
+
+这也是很正常的情况，毕竟我们不可以要求用户不在effect中进行设值操作。
+
+我们知道，通过前面的操作，很明显在执行当前副作用函数的时候，我们会把activeEffect的值设置为当前正在执行的响应式副作用对象。因此，当我们发现正在执行的副作用函数activeEffect的值，和我们下一个将要执行的effect的值是一样的时候，跳过此函数的执行即可。
+
+![image-20220625164555775](README.assets/image-20220625164555775.png)
+
+到现在，我们就实现了一个简易版的依赖收集和触发更新的操作了。当然我们还有很多情况没有考虑，这里只是简单的实现。
