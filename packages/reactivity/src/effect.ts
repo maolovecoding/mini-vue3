@@ -2,7 +2,7 @@
  * @Author: 毛毛
  * @Date: 2022-06-25 14:00:05
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-25 16:45:55
+ * @Last Modified time: 2022-06-25 17:33:56
  */
 /**
  * 传入的副作用函数类型
@@ -55,6 +55,8 @@ export class ReactiveEffect {
       // 激活状态 依赖收集了 核心就是将当前的effect和稍后渲染的属性关联在一起
       this.parent = activeEffect;
       activeEffect = this;
+      // TODO 在执行fn之前，清除此副作用函数依赖的属性set集合中 对当前effect的关联 也就是让 每个dep都去掉对当前effect的引用
+      cleanupEffect(this);
       // 执行传入的fn的时候，如果出现了响应式数据的获取操作，就可以获取到这个全局的activeEffect
       res = this.fn();
     } finally {
@@ -71,6 +73,19 @@ export class ReactiveEffect {
     this.active = false;
   }
 }
+/**
+ * 清除effect收集的dep set里 每个属性对当前effect的收集
+ * @param effect
+ */
+const cleanupEffect = (effect: ReactiveEffect) => {
+  const { deps } = effect;
+  for (let i = 0; i < deps.length; i++) {
+    // 解除key -> effect的关联 执行effect的时候重新收集
+    deps[i].delete(effect);
+  }
+  // 清空当前effect依赖的dep
+  effect.deps.length = 0;
+};
 
 type Operator = "get" | "set";
 
@@ -124,8 +139,12 @@ export const trigger = (
   }
   // 拿到属性对应的set effects
   const effects = depsMap.get(key);
-  effects &&
-    effects.forEach((effect) => {
+  // 防止死循环 刚删除的引用马上又添加进来
+  if (effects) {
+    // 把依赖effects拷贝一份 我们的执行操作在这个数组上 不直接操作原set集合了
+    const fns = [...effects];
+    fns.forEach((effect) => {
       if (effect !== activeEffect) effect.run();
     });
+  }
 };

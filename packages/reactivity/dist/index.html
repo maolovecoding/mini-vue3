@@ -15,26 +15,23 @@
     const { effect, reactive } = VueReactivity
     const obj = reactive({
       name: "张三",
-      address: [1],
       age: 22,
-      gender: "男"
+      flag: true
     })
-    let flag = true
     effect(() => {
-      obj.age = Math.random()
-      console.log(obj.name)
-      if (flag) {
+      if (obj.flag) {
+        console.log(obj.name)
+      } else {
         console.log(obj.age)
-        flag = false
       }
     })
     setTimeout(() => {
-      obj.name = '只是'
+      obj.flag = false;
+      setTimeout(() => {
+        // 此时修改name 发现我们的effect还是会执行 
+        obj.name = "nihao"
+      })
     }, 1000)
-    setTimeout(() => {
-      console.log(obj.age)
-      obj.gender = "女"
-    }, 2000)
   </script>
 </body>
 

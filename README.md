@@ -408,7 +408,7 @@ import { isObject } from "@vue/shared";
  * @Author: 毛毛
  * @Date: 2022-06-25 13:50:54
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-25 16:56:53
+ * @Last Modified time: 2022-06-25 14:15:28
  */
 // 缓存已经代理过后的响应式对象
 const reactiveMap = new WeakMap();
@@ -730,3 +730,64 @@ setTimeout(()=>{
 ![image-20220625164555775](README.assets/image-20220625164555775.png)
 
 到现在，我们就实现了一个简易版的依赖收集和触发更新的操作了。当然我们还有很多情况没有考虑，这里只是简单的实现。
+
+到现在实现了一个简单的effect函数。后续的watch，watchEffect等函数都是通过该函数实现的。
+
+
+
+### 响应式分支切换原理
+
+![image-20220625170712048](README.assets/image-20220625170712048.png)
+
+一个很简单的分支代码，我们发现在修改flag的值为false以后，此时修改name属性的值，依然会触发effect的更新操作。这是为什么？
+
+讲道理来说，我们这里的flag为false，表示我们在effect执行的时候，是不会收集到对name属性的依赖，所以在后面更新name属性值的时候，不应该再次触发effect的执行，但是结果和我们想的有出入：
+
+我们如何保证在这种分支切换的时候，取消对本次不需要依赖属性的变更？
+
+**这就需要我们在执行effect之前，清空上次已经收集的属性依赖。**
+
+那么我们肯定可以想到如下的操作：在执行effect之前，清空dep set里对当前effect的引用，然后清空当前effect里面收集的所有deps。
+
+```ts
+/**
+ * 清除effect收集的dep set里 每个属性对当前effect的收集
+ * @param effect
+ */
+const cleanupEffect = (effect: ReactiveEffect) => {
+  const { deps } = effect;
+  for (let i = 0; i < deps.length; i++) {
+    // 解除key -> effect的关联 执行effect的时候重新收集
+    deps[i].delete(effect);
+  }
+  // 清空当前effect依赖的dep
+  effect.deps.length = 0;
+};
+
+```
+
+![image-20220625172401422](README.assets/image-20220625172401422.png)
+
+看似一切正常，两边的绑定都解除了。但是会发现，控制台疯狂输出打印age的值！！！
+
+![image-20220625172445223](README.assets/image-20220625172445223.png)
+
+有点吓人，按理说没毛病，为什么会出现这种情况？
+
+原因出在执行cleanupEffect函数下面的哪一行代码：也就是执行 `this.fn()`
+
+我们刚把引用清除，这马上就加了进来。
+
+**有点像如下操作：**
+
+```ts
+const set = new Set([1,2,3])
+set.forEach((val)=>{
+    set.delete(1)
+    set.add(1)
+})
+```
+
+知道问题，我们就可以解决了。我们在循环执行副作用函数的时候，也就是触发更新哪里，不要直接操作原依赖set集合，把effects集合拷贝一份，然后循环执行再这个拷贝的数组上进行，不对当前还需要收集依赖的set集合上进行执行操作。
+
+![image-20220625173512722](README.assets/image-20220625173512722.png)

@@ -53,6 +53,7 @@ var VueReactivity = (() => {
       try {
         this.parent = activeEffect;
         activeEffect = this;
+        cleanupEffect(this);
         res = this.fn();
       } finally {
         activeEffect = this.parent;
@@ -63,6 +64,13 @@ var VueReactivity = (() => {
     stop() {
       this.active = false;
     }
+  };
+  var cleanupEffect = (effect2) => {
+    const { deps } = effect2;
+    for (let i = 0; i < deps.length; i++) {
+      deps[i].delete(effect2);
+    }
+    effect2.deps.length = 0;
   };
   var targetMap = /* @__PURE__ */ new WeakMap();
   var track = (target, type, key) => {
@@ -88,10 +96,13 @@ var VueReactivity = (() => {
       return;
     }
     const effects = depsMap.get(key);
-    effects && effects.forEach((effect2) => {
-      if (effect2 !== activeEffect)
-        effect2.run();
-    });
+    if (effects) {
+      const fns = [...effects];
+      fns.forEach((effect2) => {
+        if (effect2 !== activeEffect)
+          effect2.run();
+      });
+    }
   };
 
   // packages/reactivity/src/baseHandler.ts
