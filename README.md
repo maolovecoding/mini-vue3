@@ -535,7 +535,7 @@ export class ReactiveEffect {
     // 激活状态 才需要收集这个副作用函数fn内用到的响应式数据 也就是我们说的依赖收集
     // 非激活状态 只执行函数 不收集依赖
     if (!this.active) {
-      res = this.fn();
+      return this.fn();
     }
     try {
       // 激活状态 依赖收集了 核心就是将当前的effect和稍后渲染的属性关联在一起
@@ -791,3 +791,109 @@ set.forEach((val)=>{
 知道问题，我们就可以解决了。我们在循环执行副作用函数的时候，也就是触发更新哪里，不要直接操作原依赖set集合，把effects集合拷贝一份，然后循环执行再这个拷贝的数组上进行，不对当前还需要收集依赖的set集合上进行执行操作。
 
 ![image-20220625173512722](README.assets/image-20220625173512722.png)
+
+### effect函数返回值
+
+对于effect函数，其实是有返回值的。
+
+我们前面给ReactiveEffect对象都有一个stop方法，用来停止依赖收集。所以我们可以让effect方法返回当前effect.run方法，调用这个返回值可以再次开始收集依赖。
+
+![image-20220625220335918](README.assets/image-20220625220335918.png)
+
+```ts
+export function effect(fn: effectFn) {
+  // 创建响应式的effect
+  const _effect = new ReactiveEffect(fn);
+  // 默认先执行一次副作用函数
+  _effect.run();
+  // effect函数的返回值就是一个runner 可以让失活的effect再次收集依赖
+  const runner = _effect.run.bind(_effect); // 绑定this
+  runner.effect = _effect; // 将effect挂载到runner上
+  return runner;
+}
+```
+
+这样更改代码以后，我们可以在页面手动让effect失活，但是可以通过effect函数的返回值再次执行run函数。不过只能手动触发执行，该effect不会再次收集依赖了。
+
+![image-20220625221805118](README.assets/image-20220625221805118.png)
+
+![image-20220625221815603](README.assets/image-20220625221815603.png)
+
+**效果上我们依然可以手动触发执行effect，但是这就类似于手动执行函数了。**可以看见后面的更新属性也不会触发effect的执行了。stop函数主要是为了vue3.2新增的`effectScope`方法服务的。
+
+
+
+### vue调度器
+
+实现了上述操作，可以发现更新都是同步的，也就是我们同步连续两次修改同一个属性，会触发两次effect的执行。
+
+![image-20220625174944730](README.assets/image-20220625174944730.png)
+
+![image-20220625174951323](README.assets/image-20220625174951323.png)
+
+这个从同步代码来说是没有任何问题的。你修改了两次name属性，必须会触发两次更新。
+
+但是如果我们在一次同步代码的执行过程中，修改了几次name属性，就需要触发几次effect的更新，是不是有点消耗性能？其实我们想要的效果就是最后一次修改值生效，也就是只有同步代码执行完，才去触发依赖effect的执行。那么只需要执行一次effect函数即可。
+
+通过上面的操作，我们对effect函数的执行，要不然通过effect的返回值自己控制执行函数，要不然就是通过依赖收集以后自动触发effect的执行。
+
+有时候我们可能需要自己控制effect的执行，也就是希望把传入的函数的执行权归还给我们。这就是`调度器`的出现由来。
+
+实际上在vue内部，也是通过调度器来实现多次更新批处理（合并，只处理最后一次），以及异步更新等。
+
+在这里只是实现调度器，暂时并没有实现异步更新和批处理等。
+
+**更新一下我们的effect参数**
+
+```ts
+interface EffectOptions {
+  scheduler?: EffectScheduler;
+}
+// 调度器
+type EffectScheduler = (effect: ReactiveEffect) => any;
+
+/**
+ * 创建响应式的effect
+ * @param fn 副作用函数
+ * @param options 配置对象
+ * @returns
+ */
+export function effect(fn: effectFn, options?: EffectOptions) {
+  // 创建响应式的effect
+  const _effect = new ReactiveEffect(fn, options?.scheduler);
+  // 默认先执行一次副作用函数
+  _effect.run();
+  // effect函数的返回值就是一个runner 可以让失活的effect再次执行 只是需要手动触发执行了(不会自动开始收集依赖)
+  const runner = _effect.run.bind(_effect); // 绑定this
+  runner.effect = _effect; // 将effect挂载到runner上
+  return runner;
+}
+```
+
+**然后就是更新一下ReactiveEffect的构造函数**
+
+```ts
+constructor(public fn: effectFn, public scheduler?: EffectScheduler) {}
+```
+
+**最后就是在触发更新的时候，把我们的直接执行run方法，修改为在用户传递调度器的情况下，执行用户的逻辑**
+
+```ts
+  if (effects) {
+    // 把依赖effects拷贝一份 我们的执行操作在这个数组上 不直接操作原set集合了
+    const fns = [...effects];
+    fns.forEach((effect) => {
+      if (effect !== activeEffect) {
+        if (effect.scheduler) {
+          // 用户传入了调度函数，使用用户的
+          effect.scheduler(effect);
+        } else {
+          effect.run();
+        }
+      }
+    });
+  }
+```
+
+
+

@@ -19,17 +19,11 @@
     })
     effect(() => {
       console.log(obj.name)
-    },{
-      scheduler(fn){
-        fn.run()
-      }
     })
     setTimeout(() => {
-      obj.name = "我是名字 1"
+      obj.name += "1"
+      obj.name += "2"
     }, 1000)
-    setTimeout(() => {
-      obj.name = "我是名字 2"
-    }, 2000)
   </script>
 </body>
 

@@ -2,18 +2,34 @@
  * @Author: 毛毛
  * @Date: 2022-06-25 14:00:05
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-25 17:33:56
+ * @Last Modified time: 2022-06-25 22:38:22
  */
 /**
  * 传入的副作用函数类型
+ * @returns {Function}
  */
 type effectFn = () => any;
-export function effect(fn: effectFn) {
+interface EffectOptions {
+  scheduler?: EffectScheduler;
+}
+// 调度器
+type EffectScheduler = (effect: ReactiveEffect) => any;
+
+/**
+ * 创建响应式的effect
+ * @param fn 副作用函数
+ * @param options 配置对象
+ * @returns
+ */
+export function effect(fn: effectFn, options?: EffectOptions) {
   // 创建响应式的effect
-  const _effect = new ReactiveEffect(fn);
+  const _effect = new ReactiveEffect(fn, options?.scheduler);
   // 默认先执行一次副作用函数
-  const res = _effect.run();
-  return res;
+  _effect.run();
+  // effect函数的返回值就是一个runner 可以让失活的effect再次执行 只是需要手动触发执行了(不会自动开始收集依赖)
+  const runner = _effect.run.bind(_effect); // 绑定this
+  runner.effect = _effect; // 将effect挂载到runner上
+  return runner;
 }
 /**
  * 当前正在执行副作用函数暴露出去
@@ -38,7 +54,7 @@ export class ReactiveEffect {
    * @memberof ReactiveEffect
    */
   active = true;
-  constructor(public fn: effectFn) {}
+  constructor(public fn: effectFn, public scheduler?: EffectScheduler) {}
   /**
    *
    * run 方法 就是执行传入的副作用函数
@@ -49,7 +65,7 @@ export class ReactiveEffect {
     // 激活状态 才需要收集这个副作用函数fn内用到的响应式数据 也就是我们说的依赖收集
     // 非激活状态 只执行函数 不收集依赖
     if (!this.active) {
-      res = this.fn();
+      return this.fn();
     }
     try {
       // 激活状态 依赖收集了 核心就是将当前的effect和稍后渲染的属性关联在一起
@@ -67,10 +83,14 @@ export class ReactiveEffect {
     return res;
   }
   /**
-   * 取消副作用函数的激活 不再收集依赖
+   * 取消副作用函数的激活 不再收集依赖 且将effect上的deps清空
+   * @description 在vue3.2新增了一个 scopeEffect
    */
   stop() {
-    this.active = false;
+    if (this.active) {
+      this.active = false;
+      cleanupEffect(this);
+    }
   }
 }
 /**
@@ -144,7 +164,14 @@ export const trigger = (
     // 把依赖effects拷贝一份 我们的执行操作在这个数组上 不直接操作原set集合了
     const fns = [...effects];
     fns.forEach((effect) => {
-      if (effect !== activeEffect) effect.run();
+      if (effect !== activeEffect) {
+        if (effect.scheduler) {
+          // 用户传入了调度函数，使用用户的
+          effect.scheduler(effect);
+        } else {
+          effect.run();
+        }
+      }
     });
   }
 };
