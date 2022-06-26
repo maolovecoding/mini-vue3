@@ -12,18 +12,14 @@
   <script src="./reactivity.global.js"></script>
   <!-- <script src="../../../node_modules/@vue/reactivity/dist/reactivity.global.js"></script> -->
   <script>
-    const { effect, reactive, computed } = VueReactivity
-    const nums = reactive({
-      num1: 10,
-      num2: 20
+    const { effect, reactive } = VueReactivity
+    const obj = reactive({
+      name: "张三",
+      age: 22,
+      address: {
+        name: "河南省"
+      }
     })
-    const res = computed(() => nums.num1 + nums.num2)
-    effect(() => {
-      console.log(res.value)
-    })
-    setTimeout(() => {
-      nums.num1 = 20
-    }, 1000)
   </script>
 </body>
 

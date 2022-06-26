@@ -895,5 +895,278 @@ constructor(public fn: effectFn, public scheduler?: EffectScheduler) {}
   }
 ```
 
+### 实现属性递归代理
+
+在前面的实现代理的地方，也就是get方法哪里，我们并没有处理被代理对象属性仍然是一个对象的情况，对于属性是对象的时候，我们仍然应该再取值的时候，对该属性进行代理。vue3采取的就是再获取值的时候，如果发现是对象，对该属性进行懒代理。
+
+```ts
+  get(target, key, receiver) {
+    // 用来判断是否是响应式对象
+    // 对象没有被代理之前，没有该key，如果代理对象被用来二次代理，会在上面取值，然后get走到这里，返回true了
+    if (key === ReactiveFlags.IS_REACTIVE) {
+      return true;
+    }
+    track(target, "get", key);
+    // 取值操作
+    const value = Reflect.get(target, key, receiver);
+    if (isObject(value)) {
+      // 属性值是对象 懒代理
+      return reactive(value);
+    }
+    return value;
+  }
+```
+
+![image-20220626131755511](README.assets/image-20220626131755511.png)
+
+![image-20220626131803991](README.assets/image-20220626131803991.png)
+
+**此时可以看见，打印出来的address对象也是响应式的。**
+
+而且，如果你没有手动获取过属性是对象的值，那么是不会对该属性进行代理的。
+
+很明显：这样的方式会显著的提示性能，对于vue2是一上来就递归代理所有属性。
+
+
+
+## 计算属性的实现
+
+计算属性，最大的特点就是缓存。计算属性中所依赖的值不发生改变，我们不会重新计算最新的计算属性的值，而是取缓存中的值。
+
+而且，computed也是基于effect实现的。
+
+计算属性也是懒执行的，也就是说，定义的计算属性，如果没有使用这个计算属性的值，我们是不会真的计算值的。
+
+**所以，我们在实现计算属性的时候，内部应该是有一个标识的，表名当前计算属性的值是否是脏的，如果是脏的，表示依赖的属性发生改变，需要重新计算，那么在下次取值的时候，就会重新计算最新的值。**
+
+所以我们可以认为计算属性就是一个懒执行，有缓存的effect。而且，计算属性因为我们当做属性，所以在取计算属性的值的时候，也会收集所在的effect添加到set上。
+
+```ts
+import { ReactiveEffect } from "./effect";
+import { isFunction } from "@vue/shared";
+
+/*
+ * @Author: 毛毛
+ * @Date: 2022-06-26 13:48:11
+ * @Last Modified by: 毛毛
+ * @Last Modified time: 2022-06-26 14:19:41
+ */
+type ComputedGetter = () => any;
+type ComputedSetter = (newVal) => void;
+type ComputedOptions =
+  | ComputedGetter
+  | {
+      get: ComputedGetter;
+      set: ComputedSetter;
+    };
+export const computed = (getterOrOptions: ComputedOptions) => {
+  const onlyGetter = isFunction(getterOrOptions);
+  let getter;
+  let setter;
+  if (onlyGetter) {
+    getter = getterOrOptions;
+    setter = () => {
+      console.warn(`不能修改一个只读的计算属性的值！`);
+    };
+  } else {
+    getter = getterOrOptions.get;
+    setter = getterOrOptions.set;
+  }
+  return new ComputedRefImpl(getter, setter);
+};
+
+/**
+ * 计算属性的实现
+ */
+class ComputedRefImpl {
+  private effect: ReactiveEffect;
+  // 默认是脏数据 取值的时候会重新计算
+  private _dirty = true;
+  // 只读
+  private __v_isReadonly = true;
+  // ref
+  private __v_isRef = true;
+  // 缓存的计算属性值
+  private _value;
+  constructor(public getter: ComputedGetter, public setter: ComputedSetter) {
+    /*
+      计算属性内部就是通过可响应式的effect实现的，通过调度器来自己执行getter
+      执行getter的时候 很显然会收集依赖 在依赖变更的时候 会执行我们的调度函数
+    */
+    this.effect = new ReactiveEffect(getter, (effect) => {
+      // 依赖的属性变化 会执行该调度函数
+      if (!this._dirty) {
+        this._dirty = true; 
+      }
+    });
+  }
+  /**
+   * 类的属性访问器 -> 其实就是 definePrototype
+   *
+   * @memberof ComputedRefImpl
+   */
+  get value() {
+    // 先判断是否是脏值
+    if (this._dirty) {
+      this._value = this.effect.run();
+      // 计算最新值了  不是脏值了
+      this._dirty = false;
+    }
+    return this._value;
+  }
+  set value(newVal) {
+    this.setter(newVal);
+  }
+}
+
+```
+
+**此时：我们可以看见在effect函数中，取计算属性的值的时候，是可以正常拿到计算属性的值的**
+
+但是在依赖的时候发生更新以后，我们并没有触发effect的重新执行。这是为什么？
+
+我们在调度器中已经修改了计算属性的值是脏值的标记，为什么不会重新执行effect？
+
+```js
+    const { effect, reactive, computed } = VueReactivity
+    const nums = reactive({
+      num1: 10,
+      num2: 20
+    })
+    const res = computed(() => nums.num1 + nums.num2)
+    effect(() => {
+      console.log(res.value)
+    })
+    setTimeout(() => {
+      nums.num1 = 20
+    }, 1000)
+```
+
+![image-20220626142232533](README.assets/image-20220626142232533.png)
+
+原因在于：我们的计算属性此时只是修改了脏值标记，并没有触发计算属性ReactiveEffect的执行。
+
+我们前面说过，计算属性应该也可以收集外层effect，这样在计算属性更新的时候，会自动触发effect的再次执行。
+
+那么我们在取计算属性值的时候，应该进行依赖收集，在计算属性依赖的属性发生更新以后，也应该在修改脏值以后，触发更新。这样在更新的时候就会触发外层effect的执行。
+
+**首先优化一下我们的track方法，也就是依赖收集的方法：**
+
+```ts
+export const track = (target: object, type: Operator, key: keyof any) => {
+  // 不是在effect使用，不需要收集依赖
+  if (!activeEffect) return;
+  let depsMap = targetMap.get(target);
+  if (!depsMap) {
+    targetMap.set(target, (depsMap = new Map()));
+  }
+  let dep = depsMap.get(key);
+  if (!dep) {
+    depsMap.set(key, (dep = new Set()));
+  }
+  trackEffects(dep);
+};
+/**
+ * 收集当前正在执行的effect 放入dep中
+ * @param dep
+ * @returns
+ */
+export const trackEffects = (dep: Set<ReactiveEffect>) => {
+  if (!activeEffect) return;
+  // 判断是否有当前activeEffect
+  // 已经收集过 不需要再次收集 这种情况一般是一个副作用函数中多次使用了该属性
+  const shouldTrack = !dep.has(activeEffect);
+  if (shouldTrack) {
+    // key -> effect [eff1,eff2,...]
+    dep.add(activeEffect);
+    // 后续方便进行清理操作
+    activeEffect.deps.push(dep);
+  }
+};
+```
+
+**提取一个trackEffect方法，用以方便我们在计算属性这里收集effect**
+
+```ts
+  get value() {
+    // 收集依赖
+    trackEffects(this.dep || (this.dep = new Set()));
+    // 先判断是否是脏值
+    if (this._dirty) {
+      this._value = this.effect.run();
+      // 计算最新值了  不是脏值了
+      this._dirty = false;
+    }
+    return this._value;
+  }
+```
+
+**优化一下我们的trigger方法：**
+
+```ts
+export const trigger = (
+  target: object,
+  type: Operator,
+  key: keyof any,
+  value?: unknown,
+  oldValue?: unknown
+) => {
+  const depsMap = targetMap.get(target);
+  if (!depsMap) {
+    // 在模板中 没有用过这个对象
+    return;
+  }
+  // 拿到属性对应的set effects
+  const effects = depsMap.get(key);
+  // 防止死循环 刚删除的引用马上又添加进来
+  if (effects) {
+    triggerEffects(effects);
+  }
+};
+/**
+ * 触发执行effects
+ * @param effects
+ */
+export const triggerEffects = (effects: Set<ReactiveEffect>) => {
+  // 把依赖effects拷贝一份 我们的执行操作在这个数组上 不直接操作原set集合了
+  const fns = [...effects];
+  fns.forEach((effect) => {
+    if (effect !== activeEffect) {
+      if (effect.scheduler) {
+        // 用户传入了调度函数，使用用户的
+        effect.scheduler(effect);
+      } else {
+        effect.run();
+      }
+    }
+  });
+};
+```
+
+这样我们就可以在计算属性的调度函数哪里，进行触发计算属性的更新操作了。
+
+```ts
+this.effect = new ReactiveEffect(getter, (effect) => {
+    // 依赖的属性变化 会执行该调度函数
+    if (!this._dirty) {
+        this._dirty = true;
+        // 触发更新
+        triggerEffects(this.dep);
+    }
+});
+```
+
+**可以看见控制台打印，在num1发生改变以后，计算属性会进行重新计算，然后导致effect的重新执行。**
+
+
+
+
+
+
+
+
+
+
+
 
 

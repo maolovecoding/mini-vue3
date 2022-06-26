@@ -2,7 +2,7 @@
  * @Author: 毛毛
  * @Date: 2022-06-25 14:00:05
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-25 22:38:22
+ * @Last Modified time: 2022-06-26 14:42:39
  */
 /**
  * 传入的副作用函数类型
@@ -127,6 +127,15 @@ export const track = (target: object, type: Operator, key: keyof any) => {
   if (!dep) {
     depsMap.set(key, (dep = new Set()));
   }
+  trackEffects(dep);
+};
+/**
+ * 收集当前正在执行的effect 放入dep中
+ * @param dep
+ * @returns
+ */
+export const trackEffects = (dep: Set<ReactiveEffect>) => {
+  if (!activeEffect) return;
   // 判断是否有当前activeEffect
   // 已经收集过 不需要再次收集 这种情况一般是一个副作用函数中多次使用了该属性
   const shouldTrack = !dep.has(activeEffect);
@@ -137,6 +146,7 @@ export const track = (target: object, type: Operator, key: keyof any) => {
     activeEffect.deps.push(dep);
   }
 };
+
 /**
  * 触发更新
  * @param target
@@ -149,8 +159,8 @@ export const trigger = (
   target: object,
   type: Operator,
   key: keyof any,
-  value: unknown,
-  oldValue: unknown
+  value?: unknown,
+  oldValue?: unknown
 ) => {
   const depsMap = targetMap.get(target);
   if (!depsMap) {
@@ -161,17 +171,24 @@ export const trigger = (
   const effects = depsMap.get(key);
   // 防止死循环 刚删除的引用马上又添加进来
   if (effects) {
-    // 把依赖effects拷贝一份 我们的执行操作在这个数组上 不直接操作原set集合了
-    const fns = [...effects];
-    fns.forEach((effect) => {
-      if (effect !== activeEffect) {
-        if (effect.scheduler) {
-          // 用户传入了调度函数，使用用户的
-          effect.scheduler(effect);
-        } else {
-          effect.run();
-        }
-      }
-    });
+    triggerEffects(effects);
   }
+};
+/**
+ * 触发执行effects
+ * @param effects
+ */
+export const triggerEffects = (effects: Set<ReactiveEffect>) => {
+  // 把依赖effects拷贝一份 我们的执行操作在这个数组上 不直接操作原set集合了
+  const fns = [...effects];
+  fns.forEach((effect) => {
+    if (effect !== activeEffect) {
+      if (effect.scheduler) {
+        // 用户传入了调度函数，使用用户的
+        effect.scheduler(effect);
+      } else {
+        effect.run();
+      }
+    }
+  });
 };

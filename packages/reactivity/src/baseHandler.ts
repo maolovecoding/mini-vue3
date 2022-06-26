@@ -2,9 +2,11 @@
  * @Author: 毛毛
  * @Date: 2022-06-25 14:22:33
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-25 16:43:48
+ * @Last Modified time: 2022-06-26 13:29:34
  */
-import { activeEffect, track, trigger } from "./effect";
+import { isObject } from "@vue/shared";
+import { track, trigger } from "./effect";
+import { reactive } from "./reactive";
 export const enum ReactiveFlags {
   IS_REACTIVE = "__v_isReactive",
 }
@@ -16,7 +18,13 @@ export const mutableHandlers = {
       return true;
     }
     track(target, "get", key);
-    return Reflect.get(target, key, receiver);
+    // 取值操作
+    const value = Reflect.get(target, key, receiver);
+    if (isObject(value)) {
+      // 属性值是对象 懒代理
+      return reactive(value);
+    }
+    return value;
   },
   set(target, key, value, receiver) {
     // 拿到老值
