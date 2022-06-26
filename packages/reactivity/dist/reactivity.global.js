@@ -24,11 +24,13 @@ var VueReactivity = (() => {
     activeEffect: () => activeEffect,
     computed: () => computed,
     effect: () => effect,
+    isReactive: () => isReactive,
     reactive: () => reactive,
     track: () => track,
     trackEffects: () => trackEffects,
     trigger: () => trigger,
-    triggerEffects: () => triggerEffects
+    triggerEffects: () => triggerEffects,
+    watch: () => watch
   });
 
   // packages/shared/src/index.ts
@@ -169,6 +171,9 @@ var VueReactivity = (() => {
     reactiveMap.set(target, proxy);
     return proxy;
   }
+  var isReactive = (val) => {
+    return !!(val && val["__v_isReactive" /* IS_REACTIVE */]);
+  };
 
   // packages/reactivity/src/computed.ts
   var computed = (getterOrOptions) => {
@@ -211,6 +216,46 @@ var VueReactivity = (() => {
     set value(newVal) {
       this.setter(newVal);
     }
+  };
+
+  // packages/reactivity/src/watch.ts
+  var watch = (source, callback, { immediate = false, deep = false } = {}) => {
+    let getter;
+    let oldVal;
+    if (isFunction(source)) {
+      getter = source;
+    } else if (isReactive(source)) {
+      getter = () => traversal(source);
+    }
+    let cleanupCb;
+    const onCleanup = (cb) => {
+      cleanupCb = cb;
+    };
+    const job = () => {
+      if (cleanupCb) {
+        cleanupCb();
+        cleanupCb = null;
+      }
+      const newVal = effect2.run();
+      callback(oldVal, newVal, onCleanup);
+      oldVal = newVal;
+    };
+    const effect2 = new ReactiveEffect(getter, job);
+    oldVal = effect2.run();
+    if (immediate) {
+      callback(oldVal, void 0, onCleanup);
+    }
+  };
+  var traversal = (val, set = /* @__PURE__ */ new WeakSet()) => {
+    if (!isObject(val))
+      return val;
+    if (set.has(val))
+      return val;
+    set.add(val);
+    for (const key in val) {
+      traversal(val[key]);
+    }
+    return val;
   };
   return __toCommonJS(src_exports);
 })();

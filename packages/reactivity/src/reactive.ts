@@ -4,7 +4,7 @@ import { mutableHandlers, ReactiveFlags } from "./baseHandler";
  * @Author: 毛毛
  * @Date: 2022-06-25 13:50:54
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-25 14:24:32
+ * @Last Modified time: 2022-06-26 15:26:33
  */
 // 缓存已经代理过后的响应式对象
 const reactiveMap = new WeakMap();
@@ -30,3 +30,7 @@ export function reactive(target: unknown) {
   reactiveMap.set(target, proxy);
   return proxy;
 }
+
+export const isReactive = (val: unknown): boolean => {
+  return !!(val && val[ReactiveFlags.IS_REACTIVE]);
+};

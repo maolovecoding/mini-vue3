@@ -1160,9 +1160,163 @@ this.effect = new ReactiveEffect(getter, (effect) => {
 
 
 
+## watch实现
 
+watch可以实现对一个对象监控，当对象的属性发生更新的时候，会执行我们的回调函数。当然参数类型不仅仅是可以传入一个对象，也可以传入一个getter函数，甚至参数还可以是一个数组，也就是同时监控多个对象的变化。但是对于对象来说，实际是不区分新值和老值的，因为新旧对象都是同一个对象。
 
+当我们监控一个对象的时候，其实就相当于让这个对象的每个属性都收集一下watch函数的第二个参数，也就是吧回调函数作为effect，让每个属性都收集。
 
+**首先对于观测的对象，肯定需要是响应式的：**
+
+```ts
+export const isReactive = (val: unknown):boolean => {
+  return !!(val && val[ReactiveFlags.IS_REACTIVE]);
+};
+```
+
+**然后就可以实现watch了**
+
+```ts
+import { isReactive } from "./reactive";
+import { ReactiveEffect } from "./effect";
+import { isFunction, isObject } from "@vue/shared";
+/**
+ * @Author: 毛毛
+ * @Date: 2022-06-26 15:15:59
+ * @Last Modified by: 毛毛
+ * @Last Modified time: 2022-06-26 15:48:26
+ * @description watch API 实际是不在reactivity 包里面的
+ */
+type WatchTarget = object | (() => any);
+type WatchCallback = (newVal, oldVal) => any;
+interface WatchOptions {
+  immediate?: boolean;
+  deep?: boolean;
+}
+/**
+ *
+ * @param source 对象 或者 getter函数
+ * @param callback 回调函数
+ */
+export const watch = (
+  source: WatchTarget,
+  callback: WatchCallback,
+  { immediate = false, deep = false }: WatchOptions = {}
+) => {
+  let getter;
+  let oldVal;
+  if (isFunction(source)) {
+    getter = source;
+  } else if (isReactive(source)) {
+    // 是一个响应式对象 需要对该对象的所有属性进行循环访问一次 递归循环
+    getter = () => traversal(source);
+  }
+  const job = () => {
+    // 新值
+    const newVal = effect.run();
+    callback(oldVal, newVal);
+    oldVal = newVal;
+  };
+  const effect = new ReactiveEffect(getter, job);
+  // 记录老值
+  oldVal = effect.run();
+  if (immediate) {
+    // 立即执行一次回调
+    callback(oldVal, undefined);
+  }
+};
+
+/**
+ * 考虑循环引用 遍历对象的每一个属性
+ * @param val
+ * @param set
+ */
+const traversal = (val: object, set = new WeakSet()) => {
+  if (!isObject(val)) return val;
+  if (set.has(val)) return val;
+  set.add(val);
+  for (const key in val) {
+    traversal(val[key]);
+  }
+  return val;
+};
+
+```
+
+此时可以传入getter，或者直接传入一个响应式对象，都可以进行观测。如果需要立即执行一次回调函数，也可以传入参数。
+
+```js
+const { effect, reactive, computed, watch } = VueReactivity
+const nums = reactive({
+    num1: 10,
+    num2: 20
+})
+watch(nums, (newVal, oldVal) => {
+    console.log(newVal, oldVal)
+}, { immediate: true })
+setTimeout(() => {
+    nums.num1 = 20
+}, 2000)
+```
+
+![image-20220626155216912](README.assets/image-20220626155216912.png)
+
+可以看出此时已经实现了对对象的观测，getter函数也是可以的。但是这里getter函数的返回值不要是一个对象，那样会观测失败的。
+
+实际上在vue里面，如果传入的是一个getter，也是不能让返回值直接是一个响应式对象的。
+
+```js
+watch(() => nums, (newVal, oldVal) => {
+    console.log(newVal, oldVal)
+}, { immediate: true })
+setTimeout(() => {
+    nums.num1 = 20
+}, 2000)
+```
+
+此时是无法执行回调函数的，。。
+
+**甚至你还可以取消对某次的操作。比如发起请求等。也就是清除副作用，比如用户在输入框输入文本以后，发起请求，如果发起了两次请求，第二次请求比第一次先回来，此时我们就应该清除第一次请求的副作用。**
+
+```ts
+export const watch = (
+  source: WatchTarget,
+  callback: WatchCallback,
+  { immediate = false, deep = false }: WatchOptions = {}
+) => {
+  let getter;
+  let oldVal;
+  if (isFunction(source)) {
+    getter = source;
+  } else if (isReactive(source)) {
+    // 是一个响应式对象 需要对该对象的所有属性进行循环访问一次 递归循环
+    getter = () => traversal(source);
+  }
+  // 保存用户传入的清理函数
+  let cleanupCb: null | (() => void);
+  const onCleanup = (cb: () => void) => {
+    cleanupCb = cb;
+  };
+  const job = () => {
+    // 在下次watch触发effect的执行前 先执行用户传入的回调
+    if (cleanupCb) {
+      cleanupCb();
+      cleanupCb = null;
+    }
+    // 新值
+    const newVal = effect.run();
+    callback(oldVal, newVal, onCleanup);
+    oldVal = newVal;
+  };
+  const effect = new ReactiveEffect(getter, job);
+  // 记录老值
+  oldVal = effect.run();
+  if (immediate) {
+    // 立即执行一次回调
+    callback(oldVal, undefined, onCleanup);
+  }
+};
+```
 
 
 
