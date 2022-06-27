@@ -1416,6 +1416,132 @@ setTimeout(()=>{
 
 ref的实现和计算属性有点类似，都是通过`.vulue`访问值。
 
+## toRef和toRefs
+
+前面我们的 响应式对象都是通过`reactive`包裹一层，变成代理对象。
+
+```js
+const { effect, reactive, computed, watch,ref } = VueReactivity
+const obj = reactive({
+    name:"zs",
+    age:12,
+})
+effect(()=>{
+    app.innerHTML = `我是${obj.name}， 我今年 ${obj.age}岁了！`
+})
+setTimeout(()=>{
+    obj.age = 2
+})
+```
+
+这么使用当然是没有任何问题的，有时候，这个响应式的对象属性特别多，我们想解构了以后再使用：
+
+```js
+const obj = reactive({
+    name:"zs",
+    age:12,
+})
+const {name,age} = obj
+effect(()=>{
+    app.innerHTML = `我是${name}， 我今年 ${age}岁了！`
+})
+setTimeout(()=>{
+    obj.age = 2
+})
+```
+
+此时，这个解构出来的数据就丧失响应式数据的性质了。我们要如何让其仍然具有响应式的特性？
+
+答案就是`toRef`和`toRefs`、。我们在解构的时候，遍历其对象上的属性，将其转为`ref`,然后在修改ref的值的时候，代理为还是修改原响应式`reactive`对象上属性的修改，这样就仍然可以保证响应式的特性不丧失。
+
+```ts
+export const toRef = <T>(object: T, key) => {
+  return new ObjectRefImpl(object, key);
+};
+
+export const toRefs = <T>(object: object | T[]) => {
+  const res = isArray(object) ? new Array(object.length) : {};
+  for (const key in object) {
+    res[key] = toRef(object, key);
+  }
+  return res;
+};
+
+class ObjectRefImpl {
+  constructor(private object, private key) {}
+  get value() {
+    return this.object[this.key];
+  }
+  set value(newVal) {
+    this.object[this.key] = newVal;
+  }
+}
+```
+
+**此时，可以使用`.value`的形式访问响应式数据，对ref形式数据的修改，实际上还是代理到了原reactive对象上的操作。**
+
+```js
+const { effect, reactive, computed, watch, ref, toRefs } = VueReactivity
+const obj = reactive({
+    name: "zs",
+    age: 12,
+})
+const { name, age } = toRefs(obj)
+effect(() => {
+    app.innerHTML = `我是${name.value}， 我今年 ${age.value}岁了！`
+})
+setTimeout(() => {
+    name.value = 'ls' // 页面更新
+})
+```
+
+**对于ref的数据，我们在template模板中取值的时候，是不需要使用.value来取真实值的，vue会在我们取name属性的时候，代理到name.value上。**
+
+实际上在vue的模板里，就是使用了`proxyRefs`方法来实现的。
+
+## proxyRefs
+
+使用该API，可以把`ref`的数据转为`reactive`的形式，和上面的`toRefs`刚好反过来。
+
+```ts
+export const proxyRefs = <T>(obj: RefImpl<T>) => {
+  return new Proxy(obj, {
+    get(target, key, receiver) {
+      // 看key是否是一个ref
+      const res = Reflect.get(target, key, receiver);
+      return res.__v_isRef ? res.value : res;
+    },
+    set(target, key, value, receiver) {
+      const oldVal = Reflect.get(target, key);
+      if (oldVal.__v_isRef) {
+        oldVal.value = value;
+        return true;
+      } else {
+        return Reflect.set(target, key, value, receiver);
+      }
+    },
+  });
+};
+```
+
+```js
+const name = ref("zs")
+const age = ref(12)
+const _ctx = proxyRefs({ name, age })
+effect(() => {
+    app.innerHTML = `我是${_ctx.name}， 我今年 ${_ctx.age}岁了！`
+})
+setTimeout(()=>{
+    _ctx.name = 'ls'
+},1000)
+```
+
+可以看见，视图正常更新。
+
+当然，这个API我们很少使用，这个是vue内部在模板解析的时候所使用的。大家使用的时候也有感受，就是ref的数据在模板里面是不需要`.value`的，其实就是这个API帮我们做好的。
+
+
+
 
 
 

@@ -14,18 +14,27 @@
   <!-- <script src="../../../node_modules/vue/dist/vue.runtime.global.js"></script> -->
   <script>
     // const { effect, reactive, computed, watch } = Vue
-    const { effect, reactive, computed, watch,ref } = VueReactivity
-    const val = ref(10)
-    let flag = true
-    effect(()=>{
-      if(flag){
-        console.log(val.value)
-      }
+    const { effect, reactive, computed, watch, ref, toRefs, proxyRefs } = VueReactivity
+    // const obj = reactive({
+    //   name: "zs",
+    //   age: 12,
+    // })
+    // const { name, age } = toRefs(obj)
+    // effect(() => {
+    //   app.innerHTML = `我是${name.value}， 我今年 ${age.value}岁了！`
+    // })
+    // setTimeout(() => {
+    //   name.value = 'ls'
+    // })
+
+    const name = ref("zs")
+    const age = ref(12)
+    const _ctx = proxyRefs({ name, age })
+    effect(() => {
+      app.innerHTML = `我是${_ctx.name}， 我今年 ${_ctx.age}岁了！`
     })
     setTimeout(()=>{
-      flag = false
-      val.value = 20
-      console.log(val)
+      _ctx.name = 'ls'
     },1000)
   </script>
 </body>

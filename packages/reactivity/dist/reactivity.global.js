@@ -25,8 +25,11 @@ var VueReactivity = (() => {
     computed: () => computed,
     effect: () => effect,
     isReactive: () => isReactive,
+    proxyRefs: () => proxyRefs,
     reactive: () => reactive,
     ref: () => ref,
+    toRef: () => toRef,
+    toRefs: () => toRefs,
     track: () => track,
     trackEffects: () => trackEffects,
     trigger: () => trigger,
@@ -284,6 +287,45 @@ var VueReactivity = (() => {
   };
   var toReactive = (value) => {
     return isObject(value) ? reactive(value) : value;
+  };
+  var toRef = (object, key) => {
+    return new ObjectRefImpl(object, key);
+  };
+  var toRefs = (object) => {
+    const res = isArray(object) ? new Array(object.length) : {};
+    for (const key in object) {
+      res[key] = toRef(object, key);
+    }
+    return res;
+  };
+  var ObjectRefImpl = class {
+    constructor(object, key) {
+      this.object = object;
+      this.key = key;
+    }
+    get value() {
+      return this.object[this.key];
+    }
+    set value(newVal) {
+      this.object[this.key] = newVal;
+    }
+  };
+  var proxyRefs = (obj) => {
+    return new Proxy(obj, {
+      get(target, key, receiver) {
+        const res = Reflect.get(target, key, receiver);
+        return res.__v_isRef ? res.value : res;
+      },
+      set(target, key, value, receiver) {
+        const oldVal = Reflect.get(target, key);
+        if (oldVal.__v_isRef) {
+          oldVal.value = value;
+          return true;
+        } else {
+          return Reflect.set(target, key, value, receiver);
+        }
+      }
+    });
   };
   return __toCommonJS(src_exports);
 })();
