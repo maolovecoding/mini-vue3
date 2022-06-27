@@ -14,31 +14,19 @@
   <!-- <script src="../../../node_modules/vue/dist/vue.runtime.global.js"></script> -->
   <script>
     // const { effect, reactive, computed, watch } = Vue
-    const { effect, reactive, computed, watch } = VueReactivity
-    let nums = reactive({
-      num1: 10,
-      num2: 20
-    })
-    function getData(time) {
-      return new Promise((resolve) => {
-        setTimeout(resolve, time, `我是${time}ms后请求到的数据`)
-      })
-    }
-    const obj = reactive({
-      data: ''
-    })
-    let time = 2000
-    watch(() => obj.data, async (newVal, oldVal, onCleanup) => {
-      let clean = true;
-      onCleanup(() => {
-        clean = false;
-      })
-      time -= 1000
-      const data = await getData(time)
-      if (clean) {
-        app.innerHTML = data
+    const { effect, reactive, computed, watch,ref } = VueReactivity
+    const val = ref(10)
+    let flag = true
+    effect(()=>{
+      if(flag){
+        console.log(val.value)
       }
     })
+    setTimeout(()=>{
+      flag = false
+      val.value = 20
+      console.log(val)
+    },1000)
   </script>
 </body>
 

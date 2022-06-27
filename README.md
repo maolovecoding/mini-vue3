@@ -1318,6 +1318,106 @@ export const watch = (
 };
 ```
 
+**比如如下场景，我们只会渲染第二次请求获取到的数据到页面上，第一次获取的数据我们并不会使用了，可以理解为屏蔽了这个副作用的执行。**
+
+```js
+function getData(time) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, time, `我是${time}ms后请求到的数据`)
+    })
+}
+const obj = reactive({
+    data: ''
+})
+let time = 2000
+watch(() => obj.data, async (newVal, oldVal, onCleanup) => {
+    let clean = true;
+    onCleanup(() => {
+        clean = false;
+    })
+    time -= 1000
+    const data = await getData(time)
+    if (clean) {
+        app.innerHTML = data
+    }
+})
+obj.data+='1'
+obj.data+='1'
+```
+
+![image-20220626170514130](README.assets/image-20220626170514130.png)
+
+
+
+## ref
+
+通过前面的学习，我们知道，reactive能代理的必须是对象。也就是说我们无法代理一个基本类型的数据，比如：字符串，数字，或者一个布尔类型的标记数据。
+
+有时候我们想控制一个loading动画是否显示，在正在请求数据的时候加载loading动画，但是数据回来以后渲染组件，此时我们只需要一个布尔类型的数据作为标记就行了，不需要弄成一个对象，然后在对象里面通过某个属性值来进行判断。
+
+所以为了解决`reactive api`只能代理对象的情况，vue3推出了`ref`API，可以把一个基本类型的数据变成响应式的。
+
+当然了，本质上肯定不可能真的把一个基本类型的数据变成响应式的，基本类型数据是值类型的，值是肯定不会发生改变的。
+
+所以其实vue就在基本类型外部包了一层，将其变成一个对象形式。取值方式就类似于计算属性，通过`.value`拿到实际的值，。
+
+```ts
+export const ref = <T>(value: T) => {
+  return new RefImpl(value);
+};
+
+class RefImpl<T> {
+  private __v_isRef = true;
+  private _value: T;
+  private rawValue: T; // 原始数据
+  private dep:Set<ReactiveEffect> = new Set()
+  constructor(_value: T) {
+    this._value = toReactive(_value);
+    this.rawValue = _value;
+  }
+  get value() {
+    // 依赖收集
+    trackEffects(this.dep)
+    return this._value;
+  }
+  set value(newVal) {
+    if (newVal !== this.rawValue) {
+      this._value = toReactive(newVal);
+      this.rawValue = newVal;
+      // 触发更新
+      triggerEffects(this.dep);
+    }
+  }
+}
+/**
+ * 如果是对象 转为响应式对象
+ * @param value
+ */
+const toReactive = (value: unknown) => {
+  return isObject(value) ? reactive(value) : value;
+};
+```
+
+```js
+const { effect, reactive, computed, watch,ref } = VueReactivity
+const val = ref(10)
+let flag = true
+effect(()=>{
+    if(flag){
+        console.log(val.value)
+    }
+})
+setTimeout(()=>{
+    flag = false
+    val.value = 20
+    console.log(val)
+},1000)
+```
+
+ref的实现和计算属性有点类似，都是通过`.vulue`访问值。
+
+
+
 
 
 

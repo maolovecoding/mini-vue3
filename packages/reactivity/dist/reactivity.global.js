@@ -26,6 +26,7 @@ var VueReactivity = (() => {
     effect: () => effect,
     isReactive: () => isReactive,
     reactive: () => reactive,
+    ref: () => ref,
     track: () => track,
     trackEffects: () => trackEffects,
     trigger: () => trigger,
@@ -256,6 +257,33 @@ var VueReactivity = (() => {
       traversal(val[key]);
     }
     return val;
+  };
+
+  // packages/reactivity/src/ref.ts
+  var ref = (value) => {
+    return new RefImpl(value);
+  };
+  var RefImpl = class {
+    constructor(_value) {
+      this.__v_isRef = true;
+      this.dep = /* @__PURE__ */ new Set();
+      this._value = toReactive(_value);
+      this.rawValue = _value;
+    }
+    get value() {
+      trackEffects(this.dep);
+      return this._value;
+    }
+    set value(newVal) {
+      if (newVal !== this.rawValue) {
+        this._value = toReactive(newVal);
+        this.rawValue = newVal;
+        triggerEffects(this.dep);
+      }
+    }
+  };
+  var toReactive = (value) => {
+    return isObject(value) ? reactive(value) : value;
   };
   return __toCommonJS(src_exports);
 })();
