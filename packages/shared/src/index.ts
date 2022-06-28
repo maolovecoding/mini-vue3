@@ -18,3 +18,5 @@ export const isNumber = (val: unknown): val is number => {
 export const isArray = Array.isArray;
 
 export const assign = Object.assign;
+
+export * from "./shapeFlag";

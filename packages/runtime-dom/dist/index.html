@@ -13,10 +13,11 @@
   <script src="./runtime-dom.global.js"></script>
   <!-- <script src="../../../node_modules/@vue/runtime-dom/dist/runtime-dom.global.js"></script> -->
   <script>
-    const { createRenderer ,h,render} = VueRuntimeDOM
+    const { createRenderer, h, render } = VueRuntimeDOM
     // const renderer = createRenderer()
-    console.dir(createRenderer)
-    // renderer.render(h("h1","你好"),app)
+    const vnode = render(h("h1",{style:{"color":"red"}}, h("span",{style:{"color":"skyblue"}},"你好"),h("span","世界")), app)
+    // renderer.render(h("h1", "你好"), app)
+    // console.log(vnode)
   </script>
 </body>
 
