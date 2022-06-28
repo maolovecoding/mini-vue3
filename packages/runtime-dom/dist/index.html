@@ -22,16 +22,22 @@
       h("h2",{key:"a"}, "a"),
       h("h2",{key:"b"}, "b"),
       h("h2",{key:"c"}, "c"),
+      h("h2",{key:"d"}, "d"),
       h("h2",{key:"e"}, "e"),
+      h("h2",{key:"f"}, "f"),
+      h("h2",{key:"g"}, "g"),
       // h("h2", "f"),
     ]), app)
     setTimeout(() => {
       render(h("div", { style: { color: "red" } }, [
       h("h2",{key:"a"}, "a"),
       h("h2",{key:"b"}, "b"),
-      // h("h2",{key:"c"}, "c"),
-      // h("h2",{key:"d"}, "d"),
-      // h("h2",{key:"e"}, "e"),
+      h("h2",{key:"e",style:{color:"blue"}}, "e"),
+      h("h2",{key:"c"}, "c"),
+      h("h2",{key:"d"}, "d"),
+      h("h2",{key:"h"}, "h"),
+      h("h2",{key:"f"}, "f"),
+      h("h2",{key:"g"}, "g"),
       ]), app)
       console.log(app)
     }, 1000)

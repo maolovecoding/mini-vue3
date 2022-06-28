@@ -162,15 +162,54 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         patch(null, c2[i++], el, anchor);
       }
     }
-    // 同序列卸载 
-    else if(i > e2){
-      debugger
-      while(i <= e1){
-        unmount(c1[i++])
+    // 同序列卸载
+    else if (i > e2) {
+      while (i <= e1) {
+        unmount(c1[i++]);
       }
     }
     // TODO 乱序比对 能优化的都已经做了
-    
+    let s1 = i,
+      s2 = i;
+    // 将新的vnode做成map比较
+    const keyToNewIndexMap = new Map();
+    for (let i = s2; i <= e2; i++) {
+      keyToNewIndexMap.set(c2[i].key, i);
+    }
+    // 应该移动的节点个数
+    let toBePatched = e2 - s2 + 1;
+    // 标记被patch过的节点 也就是复用的节点
+    const newIndexToOldIndex = new Array(toBePatched).fill(0);
+    // 循环老的节点 看新的有没有 有就比较差异 没有就卸载节点
+    for (let i = s1; i <= e1; i++) {
+      const oldChild = c1[i];
+      const existIndex = keyToNewIndexMap.get(oldChild.key);
+      if (!existIndex) {
+        // 卸载
+        unmount(oldChild);
+      } else {
+        // 比较节点差异 新的索引对应老索引
+        newIndexToOldIndex[existIndex - s2] = i + 1;
+        patch(oldChild, c2[existIndex], el);
+      }
+    }
+    debugger;
+    console.log(newIndexToOldIndex);
+    // 移动节点位置 从后往前插入
+    // TODO  最长递增子序列 优化
+    for (let i = toBePatched - 1; i >= 0; i--) {
+      let index = s2 + i;
+      const current = c2[index]; // 找到最后一个节点
+      const anchor = c2[index + 1]?.el; // 参照物 插入该节点前
+      // 是新增 还是移动复用节点
+      if (newIndexToOldIndex[i] === 0) {
+        // 需要创建
+        patch(null, current, el, anchor);
+      } else {
+        // 比对过 直接移动节点即可复用
+        hostInsert(current.el, el, anchor);
+      }
+    }
   };
   /**
    * 卸载所有DOM节点
