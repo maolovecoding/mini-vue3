@@ -1542,6 +1542,18 @@ setTimeout(()=>{
 
 
 
+# runtime-core和runtime-dom
+
+**vue为了解耦，将逻辑分为了两个模块**
+
+- 运行时：runtime-core，是核心运行模块，不依赖平台（browser，小程序，app等），靠是是虚拟dom
+- 针对不同平台的运行时，runtime-dom就是基于浏览器的
+- 核心主要是靠自定义渲染器
+
+
+
+
+
 
 
 

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script src="./reactivity.global.js"></script>
+  <!-- <script src="../../../node_modules/vue/dist/vue.runtime.global.js"></script> -->
+  <script>
+    // const { effect, reactive, computed, watch } = Vue
+    const { effect, reactive, computed, watch, ref, toRefs, proxyRefs } = VueReactivity
+    // const obj = reactive({
+    //   name: "zs",
+    //   age: 12,
+    // })
+    // const { name, age } = toRefs(obj)
+    // effect(() => {
+    //   app.innerHTML = `我是${name.value}， 我今年 ${age.value}岁了！`
+    // })
+    // setTimeout(() => {
+    //   name.value = 'ls'
+    // })
+
+    const name = ref("zs")
+    const age = ref(12)
+    const _ctx = proxyRefs({ name, age })
+    effect(() => {
+      app.innerHTML = `我是${_ctx.name}， 我今年 ${_ctx.age}岁了！`
+    })
+    setTimeout(()=>{
+      _ctx.name = 'ls'
+    },1000)
+  </script>
+</body>
+
+</html>
