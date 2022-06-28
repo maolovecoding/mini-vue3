@@ -15,7 +15,26 @@
   <script>
     const { createRenderer, h, render } = VueRuntimeDOM
     // const renderer = createRenderer()
-    const vnode = render(h("h1",{style:{"color":"red"}}, h("span",{style:{"color":"skyblue"}},"你好"),h("span","世界")), app)
+    // const vnode = render(h("h1", { style: { "color": "red" } }, h("span", { style: { "color": "skyblue" } }, "你好"), h("span", "世界"), "哈哈哈"), app)
+    // const vnode = render(h("div", { style: { color: "red" } }, [h("span","你好"),h("span","a")]), app)
+    // const vnode = render(h("div", { style: { color: "red" } }, "ni","2"), app)
+    render(h("div", { style: { color: "red" } }, [
+      h("h2",{key:"a"}, "a"),
+      h("h2",{key:"b"}, "b"),
+      h("h2",{key:"c"}, "c"),
+      h("h2",{key:"e"}, "e"),
+      // h("h2", "f"),
+    ]), app)
+    setTimeout(() => {
+      render(h("div", { style: { color: "red" } }, [
+      h("h2",{key:"a"}, "a"),
+      h("h2",{key:"b"}, "b"),
+      // h("h2",{key:"c"}, "c"),
+      // h("h2",{key:"d"}, "d"),
+      // h("h2",{key:"e"}, "e"),
+      ]), app)
+      console.log(app)
+    }, 1000)
     // renderer.render(h("h1", "你好"), app)
     // console.log(vnode)
   </script>

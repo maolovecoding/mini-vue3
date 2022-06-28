@@ -9,7 +9,7 @@ const insert = (child: Node, parent: Node, anchor: null | Node = null) => {
 };
 
 const remove = (child: Node) => {
-  child.parentNode?.removeChild(child);
+  child?.parentNode?.removeChild(child);
 };
 /**
  * 设置元素节点的内容
