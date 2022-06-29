@@ -2,9 +2,9 @@
  * @Author: 毛毛
  * @Date: 2022-06-28 08:13:04
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-29 10:50:34
+ * @Last Modified time: 2022-06-29 11:05:00
  */
-import { isString, ShapeFlags, isArray } from "@vue/shared";
+import { isString, ShapeFlags, isArray, isObject } from "@vue/shared";
 /**
  * 判断两个节点是否是相同节点 （是否可复用）
  * @param n1
@@ -25,7 +25,11 @@ export const Fragment = Symbol("fragment");
  */
 export const createVnode = (type: string | symbol, props, children = null) => {
   // 组合方案 shapeFlag 一个元素中包含的是多个儿子 还是一个儿子
-  const shapeFlag = isString(type) ? ShapeFlags.ELEMENT : 0;
+  const shapeFlag = isString(type)
+    ? ShapeFlags.ELEMENT
+    : isObject(type) // 是组件
+    ? ShapeFlags.STATEFUL_COMPONENT
+    : 0;
   let key;
   if (props?.key) {
     key = props.key;

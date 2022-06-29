@@ -1,7 +1,8 @@
-import { isString } from "./../../shared/src/index";
 import { createVnode, Fragment, isSameVnode, Text } from "./vnode";
-import { ShapeFlags } from "@vue/shared";
+import { ShapeFlags, isString } from "@vue/shared";
 import { getSequence } from "./sequence";
+import { reactive, ReactiveEffect } from "@vue/reactivity";
+import { queueJob } from "./scheduler";
 /**
  * 创建渲染器
  * @param renderOptions
@@ -194,7 +195,6 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         patch(oldChild, c2[existIndex], el);
       }
     }
-    console.log(newIndexToOldIndex);
     // 移动节点位置 从后往前插入
     // TODO  最长递增子序列 优化
     // 获取最长递增子序列
@@ -236,6 +236,16 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       patchChildren(n1, n2, container);
     }
   };
+  /**
+   * 处理组件
+   */
+  const processComponent = (n1, n2, container, anchor) => {
+    if (n1 == null) {
+      mountComponent(n2, container, anchor);
+    } else {
+      // 组件更新 靠的是props
+    }
+  };
 
   /**
    * 更新 初渲染
@@ -266,7 +276,53 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         if (shapeFlag & ShapeFlags.ELEMENT)
           // 初次渲染 后续还有组件的初次渲染 以及更新逻辑
           processElement(n1, n2, container, anchor);
+        else if (shapeFlag & ShapeFlags.COMPONENT) {
+          // 组件类型
+          processComponent(n1, n2, container, anchor);
+        }
     }
+  };
+  /**
+   * 挂载组件
+   * @param vnode
+   * @param container
+   * @param anchor
+   */
+  const mountComponent = (vnode, container, anchor) => {
+    const { data = () => ({}), render } = vnode.type; // type  就是用户写的组件
+    // pinia 也是把数据直接通过reactive变成响应式的
+    const state = reactive(data()); // 组件状态
+    // 组件实例
+    const instance = {
+      state,
+      vnode, // 组件自身的虚拟节点
+      subTree: null, // 组件的渲染内容 vdom
+      isMounted: false, // 组件是否挂载到页面上了
+      update: null, // 组件的强制渲染
+    };
+    /**
+     * 区分组件是挂载 还是更新
+     */
+    const componentUpdate = () => {
+      if (!instance.isMounted) {
+        // 组件初始化
+        const subTree = (instance.subTree = render.call(state)); // 作为this 后续this会修改
+        patch(null, subTree, container, anchor); // 创造subTree的真实DOM
+        instance.isMounted = true;
+      } else {
+        // 更新
+        const subTree = render.call(state);
+        patch(instance.subTree, subTree, container, anchor);
+        instance.subTree = subTree;
+      }
+    };
+    // 组件的异步更新
+    const effect = new ReactiveEffect(componentUpdate, () =>
+      queueJob(instance.update)
+    );
+    // 组件的强制更新 effect.run()
+    const update = (instance.update = effect.run.bind(effect));
+    update(); // 初次渲染
   };
   /**
    * 虚拟dom -> 真实DOM -> 挂载到页面
@@ -299,7 +355,6 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
    * @param el
    */
   const mountChildren = (children, el) => {
-    console.log(children, el);
     for (let i = 0; i < children.length; i++) {
       // TODO 如果孩子是一个普通文本 "hello" 包装 返回 让字符串变成字符串的虚拟DOM
       const child = normalize(children, i);
