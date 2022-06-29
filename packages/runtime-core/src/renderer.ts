@@ -1,6 +1,7 @@
 import { isString } from "./../../shared/src/index";
-import { createVnode, isSameVnode, Text } from "./vnode";
+import { createVnode, Fragment, isSameVnode, Text } from "./vnode";
 import { ShapeFlags } from "@vue/shared";
+import { getSequence } from "./sequence";
 /**
  * 创建渲染器
  * @param renderOptions
@@ -193,10 +194,12 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         patch(oldChild, c2[existIndex], el);
       }
     }
-    debugger;
     console.log(newIndexToOldIndex);
     // 移动节点位置 从后往前插入
     // TODO  最长递增子序列 优化
+    // 获取最长递增子序列
+    const increment = getSequence(newIndexToOldIndex);
+    let j = increment.length - 1;
     for (let i = toBePatched - 1; i >= 0; i--) {
       let index = s2 + i;
       const current = c2[index]; // 找到最后一个节点
@@ -206,8 +209,13 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         // 需要创建
         patch(null, current, el, anchor);
       } else {
-        // 比对过 直接移动节点即可复用
-        hostInsert(current.el, el, anchor);
+        // 不相等 就插入节点 相同 就跳过
+        if (i !== increment[j]) {
+          // 比对过 直接移动节点即可复用
+          hostInsert(current.el, el, anchor);
+        } else {
+          j--;
+        }
       }
     }
   };
@@ -218,6 +226,14 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
   const unmountChildren = (children) => {
     for (let i = 0; i < children.length; i++) {
       unmount(children[i]);
+    }
+  };
+
+  const processFragment = (n1, n2, container) => {
+    if (n1 == null) {
+      mountChildren(n2.children, container);
+    } else {
+      patchChildren(n1, n2, container);
     }
   };
 
@@ -241,6 +257,9 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       // 文本类型
       case Text:
         processText(n1, n2, container);
+        break;
+      case Fragment: //  空 标记
+        processFragment(n1, n2, container);
         break;
       default:
         // 元素类型

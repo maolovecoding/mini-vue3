@@ -2,7 +2,7 @@
  * @Author: 毛毛
  * @Date: 2022-06-28 08:13:04
  * @Last Modified by: 毛毛
- * @Last Modified time: 2022-06-28 11:12:49
+ * @Last Modified time: 2022-06-29 10:50:34
  */
 import { isString, ShapeFlags, isArray } from "@vue/shared";
 /**
@@ -13,8 +13,10 @@ import { isString, ShapeFlags, isArray } from "@vue/shared";
 export const isSameVnode = (n1, n2) => {
   return n1.type === n2.type && n1.key === n2.key;
 };
-
+// 文本节点
 export const Text = Symbol("text");
+// 空节点
+export const Fragment = Symbol("fragment");
 /**
  * 虚拟节点有很多 组件 元素 文本 等
  * @param type

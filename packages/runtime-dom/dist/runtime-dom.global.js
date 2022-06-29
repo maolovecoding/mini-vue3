@@ -193,6 +193,44 @@ var VueRuntimeDOM = (() => {
     return !!(val == null ? void 0 : val.__v_isVnode);
   };
 
+  // packages/runtime-core/src/sequence.ts
+  function getSequence(arr) {
+    const res = [0];
+    const len = arr.length;
+    const p = arr.slice(0);
+    let resLastIndex;
+    for (let i2 = 0; i2 < len; i2++) {
+      const arrI = arr[i2];
+      if (arrI !== 0) {
+        resLastIndex = res[res.length - 1];
+        if (arr[resLastIndex] < arrI) {
+          res.push(i2);
+          p[i2] = resLastIndex;
+          continue;
+        }
+        let start = 0, end = res.length - 1, middle;
+        while (start < end) {
+          middle = start + end >> 1;
+          if (arr[res[middle]] < arrI) {
+            start = middle + 1;
+          } else {
+            end = middle;
+          }
+        }
+        if (arr[res[start]] > arrI) {
+          res[start] = i2;
+          p[i2] = res[start - 1];
+        }
+      }
+    }
+    let i = res.length, last = res[i - 1];
+    while (i--) {
+      res[i] = last;
+      last = p[last];
+    }
+    return res;
+  }
+
   // packages/runtime-core/src/renderer.ts
   var createRenderer = (renderOptions2) => {
     const {
@@ -322,8 +360,9 @@ var VueRuntimeDOM = (() => {
           patch(oldChild, c2[existIndex], el);
         }
       }
-      debugger;
       console.log(newIndexToOldIndex);
+      const increment = getSequence(newIndexToOldIndex);
+      let j = increment.length - 1;
       for (let i2 = toBePatched - 1; i2 >= 0; i2--) {
         let index = s2 + i2;
         const current = c2[index];
@@ -331,7 +370,11 @@ var VueRuntimeDOM = (() => {
         if (newIndexToOldIndex[i2] === 0) {
           patch(null, current, el, anchor);
         } else {
-          hostInsert(current.el, el, anchor);
+          if (i2 !== increment[j]) {
+            hostInsert(current.el, el, anchor);
+          } else {
+            j--;
+          }
         }
       }
     };
