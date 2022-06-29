@@ -19,4 +19,7 @@ export const isArray = Array.isArray;
 
 export const assign = Object.assign;
 
+export const hasOwnProperty = Object.prototype.hasOwnProperty;
+export const hasOwn = (obj, key) => hasOwnProperty.call(obj, key);
+
 export * from "./shapeFlag";

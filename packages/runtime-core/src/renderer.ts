@@ -1,8 +1,10 @@
+import { hasOwn } from "./../../shared/src/index";
 import { createVnode, Fragment, isSameVnode, Text } from "./vnode";
 import { ShapeFlags, isString } from "@vue/shared";
 import { getSequence } from "./sequence";
 import { reactive, ReactiveEffect } from "@vue/reactivity";
 import { queueJob } from "./scheduler";
+import { initProps } from "./componentProps";
 /**
  * 创建渲染器
  * @param renderOptions
@@ -282,6 +284,10 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         }
     }
   };
+  const publicPropertyMap = {
+    $attrs: (i) => i.attrs,
+  };
+
   /**
    * 挂载组件
    * @param vnode
@@ -289,7 +295,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
    * @param anchor
    */
   const mountComponent = (vnode, container, anchor) => {
-    const { data = () => ({}), render } = vnode.type; // type  就是用户写的组件
+    const { data = () => ({}), render, props: propsOptions = {} } = vnode.type; // type  就是用户写的组件
     // pinia 也是把数据直接通过reactive变成响应式的
     const state = reactive(data()); // 组件状态
     // 组件实例
@@ -299,19 +305,48 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       subTree: null, // 组件的渲染内容 vdom
       isMounted: false, // 组件是否挂载到页面上了
       update: null, // 组件的强制渲染
+      propsOptions, // 定义的props属性 可能是数组或者对象 只是定义
+      props: {}, // 这里记录真实传入给组件实例的 props属性和值
+      attrs: {}, // 非props的其他属性保存在这里
+      proxy: null, // 代理对象
     };
+    // 初始化 组件实例的props
+    initProps(instance, vnode.props);
+    // 创建组件实例的代理对象
+    const proxy = instance.proxy = new Proxy(instance, {
+      get(target, key, receiver) {
+        // 先在state上找访问的属性
+        const { state, props } = target;
+        if (state && hasOwn(state, key)) return Reflect.get(state, key);
+        // 去props找
+        if (props && hasOwn(props, key)) return Reflect.get(props, key);
+        // attrs
+        const getter = publicPropertyMap[key];
+        if (getter) return getter(target);
+      },
+      set(target, key, value, receiver) {
+        const { state, props } = target;
+        if (state && hasOwn(state, key)) {
+          return Reflect.set(state, key, value);
+        }
+        if (props && hasOwn(props, key)) {
+          console.warn(`不允许修改 props ${String(key)} 的值`);
+          return false;
+        }
+      },
+    });
     /**
      * 区分组件是挂载 还是更新
      */
     const componentUpdate = () => {
       if (!instance.isMounted) {
         // 组件初始化
-        const subTree = (instance.subTree = render.call(state)); // 作为this 后续this会修改
+        const subTree = (instance.subTree = render.call(proxy)); // 作为this 后续this会修改
         patch(null, subTree, container, anchor); // 创造subTree的真实DOM
         instance.isMounted = true;
       } else {
         // 更新
-        const subTree = render.call(state);
+        const subTree = render.call(proxy);
         patch(instance.subTree, subTree, container, anchor);
         instance.subTree = subTree;
       }

@@ -156,6 +156,8 @@ var VueRuntimeDOM = (() => {
     return typeof val === "string";
   };
   var isArray = Array.isArray;
+  var hasOwnProperty = Object.prototype.hasOwnProperty;
+  var hasOwn = (obj, key) => hasOwnProperty.call(obj, key);
 
   // packages/runtime-core/src/vnode.ts
   var isSameVnode = (n1, n2) => {
@@ -368,12 +370,41 @@ var VueRuntimeDOM = (() => {
     if (!isFlushing) {
       isFlushing = true;
       resolvePromise.then(() => {
+        isFlushing = false;
         const jobs = [...queue];
         queue.length = 0;
         jobs.forEach((j) => j());
-        isFlushing = false;
       });
     }
+  };
+
+  // packages/runtime-core/src/componentProps.ts
+  var initProps = (instance, rawProps) => {
+    const props = {};
+    const attrs = {};
+    let options = instance.propsOptions || {};
+    if (isArray(options)) {
+      const res = {};
+      for (const val of options) {
+        res[val] = null;
+      }
+      options = res;
+    }
+    for (const key in rawProps) {
+      const value = rawProps[key];
+      if (hasOwn(options, key)) {
+        if (options[key] !== null) {
+          if (options[key].type && !(Object(value) instanceof options[key].type) || !(Object(value) instanceof options[key])) {
+            console.warn(`${key} \u4E0D\u7B26\u5408\u7C7B\u578B\u7EA6\u675F\u8981\u6C42`);
+          }
+        }
+        props[key] = value;
+      } else {
+        attrs[key] = value;
+      }
+    }
+    instance.props = reactive(props);
+    instance.attrs = attrs;
   };
 
   // packages/runtime-core/src/renderer.ts
@@ -563,23 +594,53 @@ var VueRuntimeDOM = (() => {
           }
       }
     };
+    const publicPropertyMap = {
+      $attrs: (i) => i.attrs
+    };
     const mountComponent = (vnode, container, anchor) => {
-      const { data = () => ({}), render: render3 } = vnode.type;
+      const { data = () => ({}), render: render3, props: propsOptions = {} } = vnode.type;
       const state = reactive(data());
       const instance = {
         state,
         vnode,
         subTree: null,
         isMounted: false,
-        update: null
+        update: null,
+        propsOptions,
+        props: {},
+        attrs: {},
+        proxy: null
       };
+      initProps(instance, vnode.props);
+      const proxy = instance.proxy = new Proxy(instance, {
+        get(target, key, receiver) {
+          const { state: state2, props } = target;
+          if (state2 && hasOwn(state2, key))
+            return Reflect.get(state2, key);
+          if (props && hasOwn(props, key))
+            return Reflect.get(props, key);
+          const getter = publicPropertyMap[key];
+          if (getter)
+            return getter(target);
+        },
+        set(target, key, value, receiver) {
+          const { state: state2, props } = target;
+          if (state2 && hasOwn(state2, key)) {
+            return Reflect.set(state2, key, value);
+          }
+          if (props && hasOwn(props, key)) {
+            console.warn(`\u4E0D\u5141\u8BB8\u4FEE\u6539 props ${String(key)} \u7684\u503C`);
+            return false;
+          }
+        }
+      });
       const componentUpdate = () => {
         if (!instance.isMounted) {
-          const subTree = instance.subTree = render3.call(state);
+          const subTree = instance.subTree = render3.call(proxy);
           patch(null, subTree, container, anchor);
           instance.isMounted = true;
         } else {
-          const subTree = render3.call(state);
+          const subTree = render3.call(proxy);
           patch(instance.subTree, subTree, container, anchor);
           instance.subTree = subTree;
         }
