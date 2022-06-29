@@ -152,6 +152,9 @@ var VueRuntimeDOM = (() => {
 
   // packages/shared/src/index.ts
   var isObject = (val) => val != null && typeof val === "object";
+  var isFunction = (val) => {
+    return typeof val === "function";
+  };
   var isString = (val) => {
     return typeof val === "string";
   };
@@ -407,6 +410,61 @@ var VueRuntimeDOM = (() => {
     instance.attrs = attrs;
   };
 
+  // packages/runtime-core/src/component.ts
+  var createComponentInstance = (vnode) => {
+    const instance = {
+      data: null,
+      vnode,
+      subTree: null,
+      isMounted: false,
+      update: null,
+      propsOptions: vnode.type.props,
+      props: {},
+      attrs: {},
+      proxy: null,
+      render: null
+    };
+    return instance;
+  };
+  var setupComponent = (instance) => {
+    const { props, type } = instance.vnode;
+    initProps(instance, props);
+    instance.proxy = new Proxy(instance, publicInstanceProxyHandler);
+    const data = type.data;
+    if (!isFunction(data)) {
+      return console.warn(`data is must be a function`);
+    }
+    if (data) {
+      instance.data = reactive(data.call(instance.proxy));
+    }
+    instance.render = type.render;
+  };
+  var publicInstanceProxyHandler = {
+    get(target, key, receiver) {
+      const { data, props } = target;
+      if (data && hasOwn(data, key))
+        return Reflect.get(data, key);
+      if (props && hasOwn(props, key))
+        return Reflect.get(props, key);
+      const getter = publicPropertyMap[key];
+      if (getter)
+        return getter(target);
+    },
+    set(target, key, value, receiver) {
+      const { data, props } = target;
+      if (data && hasOwn(data, key)) {
+        return Reflect.set(data, key, value);
+      }
+      if (props && hasOwn(props, key)) {
+        console.warn(`\u4E0D\u5141\u8BB8\u4FEE\u6539 props ${String(key)} \u7684\u503C`);
+        return false;
+      }
+    }
+  };
+  var publicPropertyMap = {
+    $attrs: (i) => i.attrs
+  };
+
   // packages/runtime-core/src/renderer.ts
   var createRenderer = (renderOptions2) => {
     const {
@@ -594,46 +652,13 @@ var VueRuntimeDOM = (() => {
           }
       }
     };
-    const publicPropertyMap = {
-      $attrs: (i) => i.attrs
-    };
     const mountComponent = (vnode, container, anchor) => {
-      const { data = () => ({}), render: render3, props: propsOptions = {} } = vnode.type;
-      const state = reactive(data());
-      const instance = {
-        state,
-        vnode,
-        subTree: null,
-        isMounted: false,
-        update: null,
-        propsOptions,
-        props: {},
-        attrs: {},
-        proxy: null
-      };
-      initProps(instance, vnode.props);
-      const proxy = instance.proxy = new Proxy(instance, {
-        get(target, key, receiver) {
-          const { state: state2, props } = target;
-          if (state2 && hasOwn(state2, key))
-            return Reflect.get(state2, key);
-          if (props && hasOwn(props, key))
-            return Reflect.get(props, key);
-          const getter = publicPropertyMap[key];
-          if (getter)
-            return getter(target);
-        },
-        set(target, key, value, receiver) {
-          const { state: state2, props } = target;
-          if (state2 && hasOwn(state2, key)) {
-            return Reflect.set(state2, key, value);
-          }
-          if (props && hasOwn(props, key)) {
-            console.warn(`\u4E0D\u5141\u8BB8\u4FEE\u6539 props ${String(key)} \u7684\u503C`);
-            return false;
-          }
-        }
-      });
+      const instance = vnode.instance = createComponentInstance(vnode);
+      setupComponent(instance);
+      setupRenderEffect(instance, container, anchor);
+    };
+    const setupRenderEffect = (instance, container, anchor) => {
+      const { proxy, render: render3 } = instance;
       const componentUpdate = () => {
         if (!instance.isMounted) {
           const subTree = instance.subTree = render3.call(proxy);
