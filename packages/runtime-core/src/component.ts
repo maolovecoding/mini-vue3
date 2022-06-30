@@ -15,6 +15,7 @@ export const createComponentInstance = (vnode) => {
     attrs: {}, // 非props的其他属性保存在这里
     proxy: null, // 代理对象
     render: null, // 渲染函数
+    next: null, // 产生的组件渲染的虚拟DOM 每次确定需要更新前会清空
   };
   return instance;
 };
@@ -65,22 +66,14 @@ const publicPropertyMap = {
   $attrs: (i) => i.attrs,
 };
 
-export const updateProps = (
-  instance: ReturnType<typeof createComponentInstance>,
-  prevProps,
-  nextProps
-) => {
-  // 判断属性是否有变化
-  // 1. 属性的个数 2. 值是否变化
-  if (hasPropsChanged(prevProps, nextProps)) {
-    for (const key in nextProps) {
-      // 属性是响应式的 修改属性会触发组件的更新 重新render
-      instance.props[key] = nextProps[key];
-    }
-    for (const key in instance.props) {
-      if (!hasOwn(nextProps, key)) {
-        delete instance.props[key];
-      }
+export const updateProps = (prevProps, nextProps) => {
+  for (const key in nextProps) {
+    // 属性是响应式的 修改属性会触发组件的更新 重新render
+    prevProps[key] = nextProps[key];
+  }
+  for (const key in prevProps) {
+    if (!hasOwn(nextProps, key)) {
+      delete prevProps[key];
     }
   }
 };
@@ -91,7 +84,7 @@ export const updateProps = (
  * @param nextProps 
  * @returns 
  */
-const hasPropsChanged = (prevProps = {}, nextProps = {}) => {
+export const hasPropsChanged = (prevProps = {}, nextProps = {}) => {
   const nextKeys = Object.keys(nextProps);
   if (nextKeys.length !== Object.keys(prevProps).length) {
     return true;

@@ -5,6 +5,7 @@ import { ReactiveEffect } from "@vue/reactivity";
 import { queueJob } from "./scheduler";
 import {
   createComponentInstance,
+  hasPropsChanged,
   setupComponent,
   updateProps,
 } from "./component";
@@ -256,10 +257,31 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     // 属性的更新会导致页面重新渲染 实例的props是响应式的
     // /组件的虚拟dom 复用的是 组件实例
     const instance = (n2.component = n1.component);
-    const { props: prevProps } = n1;
-    const { props: nextProps } = n2;
+    // const { props: prevProps } = n1;
+    // const { props: nextProps } = n2;
     // 属性更新
-    updateProps(instance, prevProps, nextProps);
+    // updateProps(instance, prevProps, nextProps);
+
+    // 是否需要更新
+    if (shouldUpdateComponent(n1, n2)) {
+      instance.next = n2; // 记录组件的虚拟节点
+      instance.update();
+    }
+  };
+  /**
+   * 是否更新
+   * @param n1
+   * @param n2
+   * @returns
+   */
+  const shouldUpdateComponent = (n1, n2) => {
+    const { props: prevProps, children: prevChildren } = n1;
+    const { props: nextProps, children: nextChildren } = n2;
+    // props
+    if (prevProps === nextProps) return false;
+    // 插槽
+    if (prevChildren || nextChildren) return true;
+    return hasPropsChanged(prevProps, nextProps);
   };
 
   /**
@@ -312,6 +334,18 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     // 3. 创建组件渲染函数的effect
     setupRenderEffect(instance, container, anchor);
   };
+  /**
+   * 组件更新的入口：
+   * 组件属性的更新
+   * @param instance 
+   * @param next 
+   */
+  const updateComponentPreRender = (instance, next) => {
+    // 清空next
+    instance.next = null;
+    instance.vnode = next; // 更新渲染的vdom
+    updateProps(instance.props, next.props); // 更新props
+  };
   const setupRenderEffect = (instance, container, anchor) => {
     const { proxy, render } = instance;
     /**
@@ -324,6 +358,11 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         patch(null, subTree, container, anchor); // 创造subTree的真实DOM
         instance.isMounted = true;
       } else {
+        const { next } = instance;
+        if (next) {
+          // 更新前 需要拿到最新的属性来进行更新
+          updateComponentPreRender(instance, next);
+        }
         // 更新
         const subTree = render.call(proxy);
         patch(instance.subTree, subTree, container, anchor);

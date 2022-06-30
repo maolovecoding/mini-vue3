@@ -422,7 +422,8 @@ var VueRuntimeDOM = (() => {
       props: {},
       attrs: {},
       proxy: null,
-      render: null
+      render: null,
+      next: null
     };
     return instance;
   };
@@ -464,15 +465,13 @@ var VueRuntimeDOM = (() => {
   var publicPropertyMap = {
     $attrs: (i) => i.attrs
   };
-  var updateProps = (instance, prevProps, nextProps) => {
-    if (hasPropsChanged(prevProps, nextProps)) {
-      for (const key in nextProps) {
-        instance.props[key] = nextProps[key];
-      }
-      for (const key in instance.props) {
-        if (!hasOwn(nextProps, key)) {
-          delete instance.props[key];
-        }
+  var updateProps = (prevProps, nextProps) => {
+    for (const key in nextProps) {
+      prevProps[key] = nextProps[key];
+    }
+    for (const key in prevProps) {
+      if (!hasOwn(nextProps, key)) {
+        delete prevProps[key];
       }
     }
   };
@@ -655,9 +654,19 @@ var VueRuntimeDOM = (() => {
     };
     const updateComponent = (n1, n2) => {
       const instance = n2.component = n1.component;
-      const { props: prevProps } = n1;
-      const { props: nextProps } = n2;
-      updateProps(instance, prevProps, nextProps);
+      if (shouldUpdateComponent(n1, n2)) {
+        instance.next = n2;
+        instance.update();
+      }
+    };
+    const shouldUpdateComponent = (n1, n2) => {
+      const { props: prevProps, children: prevChildren } = n1;
+      const { props: nextProps, children: nextChildren } = n2;
+      if (prevProps === nextProps)
+        return false;
+      if (prevChildren || nextChildren)
+        return true;
+      return hasPropsChanged(prevProps, nextProps);
     };
     const patch = (n1, n2, container, anchor = void 0) => {
       if (n1 === n2)
@@ -687,6 +696,11 @@ var VueRuntimeDOM = (() => {
       setupComponent(instance);
       setupRenderEffect(instance, container, anchor);
     };
+    const updateComponentPreRender = (instance, next) => {
+      instance.next = null;
+      instance.vnode = next;
+      updateProps(instance.props, next.props);
+    };
     const setupRenderEffect = (instance, container, anchor) => {
       const { proxy, render: render3 } = instance;
       const componentUpdate = () => {
@@ -695,6 +709,10 @@ var VueRuntimeDOM = (() => {
           patch(null, subTree, container, anchor);
           instance.isMounted = true;
         } else {
+          const { next } = instance;
+          if (next) {
+            updateComponentPreRender(instance, next);
+          }
           const subTree = render3.call(proxy);
           patch(instance.subTree, subTree, container, anchor);
           instance.subTree = subTree;
