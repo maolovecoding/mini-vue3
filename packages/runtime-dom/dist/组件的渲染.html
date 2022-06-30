@@ -14,25 +14,33 @@
   <!-- <script src="../../../node_modules/@vue/runtime-dom/dist/runtime-dom.global.js"></script> -->
   <script>
     const { createRenderer, h, render } = VueRuntimeDOM
+    const cmp = {
+      props: ["address"],
+      render() {
+        return h("h2", this.address)
+      }
+    }
     const app = {
       // 组件接收的属性 是props 未接收 但是传给组件的属性 叫做 attrs
-      props: {
-        address:String
-      },
+      // props: {
+      //   address: String
+      // },
       data() {
         return {
-          name: "zs",
-          age: 22
+          flag: true
         }
       },
       render() {
-        console.log(this)
-        // setTimeout(() => {
-        //   this.age++
-        //   this.name += '1'
-        //   console.log(this)
-        // }, 1000)
-        return h("div", { style: { color: "blue" } }, `我的名字是${this.name},今年${this.age}岁. ${this.$attrs.a}`)
+        return h("div", { style: { color: "blue", width: "200px", height: "200px", background: "skyblue" } },
+          [
+            h("button", {
+              onClick:()=> {
+                console.log(this)
+                this.flag = false
+              }
+            }, "我是按钮"),
+            h(cmp, { address: this.flag ? "和南宁市" : "洛阳" })
+          ])
       }
     }
     render(h(app, { address: "河南省", a: 1, b: 2 }), document.getElementById("app"));

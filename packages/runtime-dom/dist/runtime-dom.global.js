@@ -431,10 +431,10 @@ var VueRuntimeDOM = (() => {
     initProps(instance, props);
     instance.proxy = new Proxy(instance, publicInstanceProxyHandler);
     const data = type.data;
-    if (!isFunction(data)) {
-      return console.warn(`data is must be a function`);
-    }
     if (data) {
+      if (!isFunction(data)) {
+        return console.warn(`data is must be a function`);
+      }
       instance.data = reactive(data.call(instance.proxy));
     }
     instance.render = type.render;
@@ -463,6 +463,29 @@ var VueRuntimeDOM = (() => {
   };
   var publicPropertyMap = {
     $attrs: (i) => i.attrs
+  };
+  var updateProps = (instance, prevProps, nextProps) => {
+    if (hasPropsChanged(prevProps, nextProps)) {
+      for (const key in nextProps) {
+        instance.props[key] = nextProps[key];
+      }
+      for (const key in instance.props) {
+        if (!hasOwn(nextProps, key)) {
+          delete instance.props[key];
+        }
+      }
+    }
+  };
+  var hasPropsChanged = (prevProps = {}, nextProps = {}) => {
+    const nextKeys = Object.keys(nextProps);
+    if (nextKeys.length !== Object.keys(prevProps).length) {
+      return true;
+    }
+    for (const key of nextKeys) {
+      if (nextProps[key] !== prevProps[key])
+        return true;
+    }
+    return false;
   };
 
   // packages/runtime-core/src/renderer.ts
@@ -627,7 +650,14 @@ var VueRuntimeDOM = (() => {
       if (n1 == null) {
         mountComponent(n2, container, anchor);
       } else {
+        updateComponent(n1, n2);
       }
+    };
+    const updateComponent = (n1, n2) => {
+      const instance = n2.component = n1.component;
+      const { props: prevProps } = n1;
+      const { props: nextProps } = n2;
+      updateProps(instance, prevProps, nextProps);
     };
     const patch = (n1, n2, container, anchor = void 0) => {
       if (n1 === n2)
@@ -653,7 +683,7 @@ var VueRuntimeDOM = (() => {
       }
     };
     const mountComponent = (vnode, container, anchor) => {
-      const instance = vnode.instance = createComponentInstance(vnode);
+      const instance = vnode.component = createComponentInstance(vnode);
       setupComponent(instance);
       setupRenderEffect(instance, container, anchor);
     };

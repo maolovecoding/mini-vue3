@@ -29,10 +29,10 @@ export const setupComponent = (
   // 创建组件实例的代理对象
   instance.proxy = new Proxy(instance, publicInstanceProxyHandler);
   const data = type.data;
-  if (!isFunction(data)) {
-    return console.warn(`data is must be a function`);
-  }
   if (data) {
+    if (!isFunction(data)) {
+      return console.warn(`data is must be a function`);
+    }
     instance.data = reactive(data.call(instance.proxy));
   }
   instance.render = type.render;
@@ -63,4 +63,41 @@ const publicInstanceProxyHandler = {
 
 const publicPropertyMap = {
   $attrs: (i) => i.attrs,
+};
+
+export const updateProps = (
+  instance: ReturnType<typeof createComponentInstance>,
+  prevProps,
+  nextProps
+) => {
+  // 判断属性是否有变化
+  // 1. 属性的个数 2. 值是否变化
+  if (hasPropsChanged(prevProps, nextProps)) {
+    for (const key in nextProps) {
+      // 属性是响应式的 修改属性会触发组件的更新 重新render
+      instance.props[key] = nextProps[key];
+    }
+    for (const key in instance.props) {
+      if (!hasOwn(nextProps, key)) {
+        delete instance.props[key];
+      }
+    }
+  }
+};
+/**
+ *   判断属性是否有变化
+  // 1. 属性的个数 2. 值是否变化
+ * @param prevProps 
+ * @param nextProps 
+ * @returns 
+ */
+const hasPropsChanged = (prevProps = {}, nextProps = {}) => {
+  const nextKeys = Object.keys(nextProps);
+  if (nextKeys.length !== Object.keys(prevProps).length) {
+    return true;
+  }
+  for (const key of nextKeys) {
+    if (nextProps[key] !== prevProps[key]) return true;
+  }
+  return false;
 };

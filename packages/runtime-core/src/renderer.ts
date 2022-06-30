@@ -3,7 +3,11 @@ import { ShapeFlags, isString } from "@vue/shared";
 import { getSequence } from "./sequence";
 import { ReactiveEffect } from "@vue/reactivity";
 import { queueJob } from "./scheduler";
-import { createComponentInstance, setupComponent } from "./component";
+import {
+  createComponentInstance,
+  setupComponent,
+  updateProps,
+} from "./component";
 /**
  * 创建渲染器
  * @param renderOptions
@@ -245,7 +249,17 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       mountComponent(n2, container, anchor);
     } else {
       // 组件更新 靠的是props
+      updateComponent(n1, n2);
     }
+  };
+  const updateComponent = (n1, n2) => {
+    // 属性的更新会导致页面重新渲染 实例的props是响应式的
+    // /组件的虚拟dom 复用的是 组件实例
+    const instance = (n2.component = n1.component);
+    const { props: prevProps } = n1;
+    const { props: nextProps } = n2;
+    // 属性更新
+    updateProps(instance, prevProps, nextProps);
   };
 
   /**
@@ -292,7 +306,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
    */
   const mountComponent = (vnode, container, anchor) => {
     // 1. 创造组件实例
-    const instance = (vnode.instance = createComponentInstance(vnode));
+    const instance = (vnode.component = createComponentInstance(vnode));
     // 2. 给实例上赋值
     setupComponent(instance);
     // 3. 创建组件渲染函数的effect
