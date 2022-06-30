@@ -70,6 +70,8 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     const oldProps = n1.props || {};
     const newProps = n2.props || {};
     patchProps(oldProps, newProps, el);
+    // TODO 处理文本节点
+    // n2 = normalize(n2)
     // 比较孩子
     patchChildren(n1, n2, el);
   };

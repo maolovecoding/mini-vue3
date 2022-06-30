@@ -363,6 +363,25 @@ var VueRuntimeDOM = (() => {
     return proxy;
   }
 
+  // packages/reactivity/src/ref.ts
+  var proxyRefs = (obj) => {
+    return new Proxy(obj, {
+      get(target, key, receiver) {
+        const res = Reflect.get(target, key, receiver);
+        return res.__v_isRef ? res.value : res;
+      },
+      set(target, key, value, receiver) {
+        const oldVal = Reflect.get(target, key);
+        if (oldVal.__v_isRef) {
+          oldVal.value = value;
+          return true;
+        } else {
+          return Reflect.set(target, key, value, receiver);
+        }
+      }
+    });
+  };
+
   // packages/runtime-core/src/scheduler.ts
   var queue = [];
   var isFlushing = false;
@@ -423,7 +442,8 @@ var VueRuntimeDOM = (() => {
       attrs: {},
       proxy: null,
       render: null,
-      next: null
+      next: null,
+      setupState: null
     };
     return instance;
   };
@@ -438,11 +458,23 @@ var VueRuntimeDOM = (() => {
       }
       instance.data = reactive(data.call(instance.proxy));
     }
-    instance.render = type.render;
+    const setup = type.setup;
+    if (setup) {
+      const setupContext = {};
+      const setupResult = setup(instance.props, setupContext);
+      if (isFunction(setupResult)) {
+        instance.render = setupResult;
+      } else if (isObject(setupResult)) {
+        instance.setupState = proxyRefs(setupResult);
+      }
+    } else
+      instance.render = type.render;
   };
   var publicInstanceProxyHandler = {
     get(target, key, receiver) {
-      const { data, props } = target;
+      const { data, props, setupState } = target;
+      if (setupState && hasOwn(setupState, key))
+        return Reflect.get(setupState, key);
       if (data && hasOwn(data, key))
         return Reflect.get(data, key);
       if (props && hasOwn(props, key))
@@ -452,7 +484,10 @@ var VueRuntimeDOM = (() => {
         return getter(target);
     },
     set(target, key, value, receiver) {
-      const { data, props } = target;
+      const { data, props, setupState } = target;
+      if (setupState && hasOwn(setupState, key)) {
+        return Reflect.set(setupState, key, value);
+      }
       if (data && hasOwn(data, key)) {
         return Reflect.set(data, key, value);
       }

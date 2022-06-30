@@ -1,5 +1,5 @@
-import { isFunction, hasOwn } from "@vue/shared";
-import { reactive } from "@vue/reactivity";
+import { isFunction, hasOwn, isObject } from "@vue/shared";
+import { proxyRefs, reactive } from "@vue/reactivity";
 import { initProps } from "./componentProps";
 export const createComponentInstance = (vnode) => {
   // pinia 也是把数据直接通过reactive变成响应式的
@@ -16,6 +16,7 @@ export const createComponentInstance = (vnode) => {
     proxy: null, // 代理对象
     render: null, // 渲染函数
     next: null, // 产生的组件渲染的虚拟DOM 每次确定需要更新前会清空
+    setupState: null, // setup函数返回值
   };
   return instance;
 };
@@ -36,13 +37,30 @@ export const setupComponent = (
     }
     instance.data = reactive(data.call(instance.proxy));
   }
-  instance.render = type.render;
+  // 拿到setup函数
+  const setup = type.setup;
+  if (setup) {
+    // setup函数的上下文参数
+    const setupContext = {};
+    // 执行setup函数
+    const setupResult = setup(instance.props, setupContext);
+    // 返回值是函数 就作为render函数了
+    if (isFunction(setupResult)) {
+      instance.render = setupResult;
+    } else if (isObject(setupResult)) {
+      // 是对象 就是作为render函数会用到的属性
+      instance.setupState = proxyRefs<any>(setupResult as any); // 取消 ref的.value
+    }
+  } else instance.render = type.render;
 };
 
 const publicInstanceProxyHandler = {
   get(target, key, receiver) {
-    // 先在data上找访问的属性
-    const { data, props } = target;
+    const { data, props, setupState } = target;
+    // 在setup返回值上找
+    if (setupState && hasOwn(setupState, key))
+      return Reflect.get(setupState, key);
+    // 在data上找访问的属性
     if (data && hasOwn(data, key)) return Reflect.get(data, key);
     // 去props找
     if (props && hasOwn(props, key)) return Reflect.get(props, key);
@@ -51,7 +69,10 @@ const publicInstanceProxyHandler = {
     if (getter) return getter(target);
   },
   set(target, key, value, receiver) {
-    const { data, props } = target;
+    const { data, props, setupState } = target;
+    if (setupState && hasOwn(setupState, key)) {
+      return Reflect.set(setupState, key, value);
+    }
     if (data && hasOwn(data, key)) {
       return Reflect.set(data, key, value);
     }
