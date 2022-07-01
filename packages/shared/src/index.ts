@@ -22,4 +22,10 @@ export const assign = Object.assign;
 export const hasOwnProperty = Object.prototype.hasOwnProperty;
 export const hasOwn = (obj, key) => hasOwnProperty.call(obj, key);
 
+export const invokeArrayFns = (fns) => {
+  for (let i = 0; i < fns.length; i++) {
+    fns[i]();
+  }
+};
+
 export * from "./shapeFlag";

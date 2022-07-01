@@ -1,5 +1,5 @@
 import { createVnode, Fragment, isSameVnode, Text } from "./vnode";
-import { ShapeFlags, isString } from "@vue/shared";
+import { ShapeFlags, isString, invokeArrayFns } from "@vue/shared";
 import { getSequence } from "./sequence";
 import { ReactiveEffect } from "@vue/reactivity";
 import { queueJob } from "./scheduler";
@@ -339,8 +339,8 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
   /**
    * 组件更新的入口：
    * 组件属性的更新
-   * @param instance 
-   * @param next 
+   * @param instance
+   * @param next
    */
   const updateComponentPreRender = (instance, next) => {
     // 清空next
@@ -355,20 +355,33 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
      */
     const componentUpdate = () => {
       if (!instance.isMounted) {
+        const { bm, m } = instance;
+        if (bm) {
+          invokeArrayFns(bm);
+        }
         // 组件初始化
         const subTree = (instance.subTree = render.call(proxy)); // 作为this 后续this会修改
         patch(null, subTree, container, anchor); // 创造subTree的真实DOM
         instance.isMounted = true;
+        if (m) {
+          invokeArrayFns(m);
+        }
       } else {
-        const { next } = instance;
+        const { next, bu, u } = instance;
         if (next) {
           // 更新前 需要拿到最新的属性来进行更新
           updateComponentPreRender(instance, next);
+        }
+        if (bu) {
+          invokeArrayFns(bu);
         }
         // 更新
         const subTree = render.call(proxy);
         patch(instance.subTree, subTree, container, anchor);
         instance.subTree = subTree;
+        if (u) {
+          invokeArrayFns(u);
+        }
       }
     };
     // 组件的异步更新

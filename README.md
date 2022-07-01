@@ -360,7 +360,7 @@ function createConfig(format,output){
 export default packageConfigs.map(format=> createConfig(format,outputConfigs[format]));
 ```
 
-#### [#](http://zhufengpeixun.com/jg-vue/guide/02.start.html#build-js)build.js
+#### build.js
 
 ```js
 const fs = require('fs');

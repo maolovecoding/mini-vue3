@@ -2,6 +2,14 @@ import { isFunction, hasOwn, isObject } from "@vue/shared";
 import { proxyRefs, reactive } from "@vue/reactivity";
 import { initProps } from "./componentProps";
 import { initSlots } from "./componentSlots";
+
+// 获取实例
+export let currentInstance = null;
+export const setCurrentInstance = (instance) => {
+  currentInstance = instance;
+};
+export const getCurrentInstance = () => currentInstance;
+
 export const createComponentInstance = (vnode) => {
   // pinia 也是把数据直接通过reactive变成响应式的
   // 组件实例
@@ -55,8 +63,11 @@ export const setupComponent = (
       attrs: instance.attrs,
       slots: instance.slots,
     };
+    // 设置组件实例到全局
+    setCurrentInstance(instance);
     // 执行setup函数
     const setupResult = setup(instance.props, setupContext);
+    setCurrentInstance(null);
     // 返回值是函数 就作为render函数了
     if (isFunction(setupResult)) {
       instance.render = setupResult;

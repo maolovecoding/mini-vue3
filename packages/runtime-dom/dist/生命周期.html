@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script src="./runtime-dom.global.js"></script>
+  <!-- <script src="../../../node_modules/@vue/runtime-dom/dist/runtime-dom.global.js"></script> -->
+  <script>
+    const { createRenderer, h, render, onBeforeMount, getCurrentInstance,onMounted } = VueRuntimeDOM
+    const cmp = {
+      props: ["address"],
+      render() {
+        return h("h2", this.address)
+      }
+    }
+    const app = {
+      data() {
+        return {
+          flag: true
+        }
+      },
+      setup(props, { slots }) {
+        console.log(getCurrentInstance())
+        onBeforeMount(() => {
+          console.log(1)
+          console.log(getCurrentInstance())
+          debugger
+        })
+        onMounted(() => {
+          console.log(2)
+          console.log(getCurrentInstance())
+          debugger
+        })
+        return function () {
+          return h("div", { style: { color: "blue", width: "200px", height: "200px", background: "skyblue" } },
+            [
+              h("button", {
+                onClick: () => {
+                  console.log(this)
+                  this.flag = false
+                }
+              }, "我是按钮"),
+              slots.main(),
+              h(cmp, { address: this.flag ? "和南宁市" : "洛阳" })
+            ])
+        }
+      },
+    }
+    render(h(app, { address: "河南省", a: 1, b: 2 },
+      // 插槽 
+      {
+        main: () => h("h1", "我是main插槽")
+      }
+    ), document.getElementById("app"));
+  </script>
+</body>
+
+</html>
