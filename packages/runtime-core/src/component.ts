@@ -1,6 +1,7 @@
 import { isFunction, hasOwn, isObject } from "@vue/shared";
 import { proxyRefs, reactive } from "@vue/reactivity";
 import { initProps } from "./componentProps";
+import { initSlots } from "./componentSlots";
 export const createComponentInstance = (vnode) => {
   // pinia 也是把数据直接通过reactive变成响应式的
   // 组件实例
@@ -17,6 +18,7 @@ export const createComponentInstance = (vnode) => {
     render: null, // 渲染函数
     next: null, // 产生的组件渲染的虚拟DOM 每次确定需要更新前会清空
     setupState: null, // setup函数返回值
+    slots: null, // 组件插槽
   };
   return instance;
 };
@@ -24,10 +26,11 @@ export const createComponentInstance = (vnode) => {
 export const setupComponent = (
   instance: ReturnType<typeof createComponentInstance>
 ) => {
-  const { props, type } = instance.vnode;
+  const { props, type, children } = instance.vnode;
   // 初始化 组件实例的props
   initProps(instance, props);
-
+  // 初始化插槽
+  initSlots(instance, children);
   // 创建组件实例的代理对象
   instance.proxy = new Proxy(instance, publicInstanceProxyHandler);
   const data = type.data;
@@ -41,7 +44,17 @@ export const setupComponent = (
   const setup = type.setup;
   if (setup) {
     // setup函数的上下文参数
-    const setupContext = {};
+    const setupContext = {
+      emit(event, ...args) {
+        const eventName = `on${event[0].toUpperCase() + event.slice(1)}`;
+        // 找到属性上的方法
+        const handler = instance.vnode.props[eventName];
+        // 执行触发的函数
+        handler && handler(...args);
+      },
+      attrs: instance.attrs,
+      slots: instance.slots,
+    };
     // 执行setup函数
     const setupResult = setup(instance.props, setupContext);
     // 返回值是函数 就作为render函数了
@@ -85,6 +98,7 @@ const publicInstanceProxyHandler = {
 
 const publicPropertyMap = {
   $attrs: (i) => i.attrs,
+  $slots: (i) => i.slots,
 };
 
 export const updateProps = (prevProps, nextProps) => {

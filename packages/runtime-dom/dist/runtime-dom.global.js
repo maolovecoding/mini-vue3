@@ -188,6 +188,8 @@ var VueRuntimeDOM = (() => {
       let type2 = 0;
       if (isArray(children)) {
         type2 = 16 /* ARRAY_CHILDREN */;
+      } else if (isObject(children)) {
+        type2 = 32 /* SLOTS_CHILDREN */;
       } else {
         children = String(children);
         type2 = 8 /* TEXT_CHILDREN */;
@@ -429,6 +431,13 @@ var VueRuntimeDOM = (() => {
     instance.attrs = attrs;
   };
 
+  // packages/runtime-core/src/componentSlots.ts
+  var initSlots = (instance, children) => {
+    if (instance.vnode.shapeFlag & 32 /* SLOTS_CHILDREN */) {
+      instance.slots = children;
+    }
+  };
+
   // packages/runtime-core/src/component.ts
   var createComponentInstance = (vnode) => {
     const instance = {
@@ -443,13 +452,15 @@ var VueRuntimeDOM = (() => {
       proxy: null,
       render: null,
       next: null,
-      setupState: null
+      setupState: null,
+      slots: null
     };
     return instance;
   };
   var setupComponent = (instance) => {
-    const { props, type } = instance.vnode;
+    const { props, type, children } = instance.vnode;
     initProps(instance, props);
+    initSlots(instance, children);
     instance.proxy = new Proxy(instance, publicInstanceProxyHandler);
     const data = type.data;
     if (data) {
@@ -460,7 +471,15 @@ var VueRuntimeDOM = (() => {
     }
     const setup = type.setup;
     if (setup) {
-      const setupContext = {};
+      const setupContext = {
+        emit(event, ...args) {
+          const eventName = `on${event[0].toUpperCase() + event.slice(1)}`;
+          const handler = instance.vnode.props[eventName];
+          handler && handler(...args);
+        },
+        attrs: instance.attrs,
+        slots: instance.slots
+      };
       const setupResult = setup(instance.props, setupContext);
       if (isFunction(setupResult)) {
         instance.render = setupResult;
@@ -498,7 +517,8 @@ var VueRuntimeDOM = (() => {
     }
   };
   var publicPropertyMap = {
-    $attrs: (i) => i.attrs
+    $attrs: (i) => i.attrs,
+    $slots: (i) => i.slots
   };
   var updateProps = (prevProps, nextProps) => {
     for (const key in nextProps) {

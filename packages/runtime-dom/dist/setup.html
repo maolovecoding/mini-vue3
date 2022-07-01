@@ -26,7 +26,8 @@
           flag: true
         }
       },
-      setup() {
+      setup(props, { slots }) {
+        console.log(arguments)
         return function () {
           return h("div", { style: { color: "blue", width: "200px", height: "200px", background: "skyblue" } },
             [
@@ -36,12 +37,18 @@
                   this.flag = false
                 }
               }, "我是按钮"),
+              slots.main(),
               h(cmp, { address: this.flag ? "和南宁市" : "洛阳" })
             ])
         }
       },
     }
-    render(h(app, { address: "河南省", a: 1, b: 2 }), document.getElementById("app"));
+    render(h(app, { address: "河南省", a: 1, b: 2 },
+      // 插槽 
+      {
+        main: () => h("h1", "我是main插槽")
+      }
+    ), document.getElementById("app"));
   </script>
 </body>
 
