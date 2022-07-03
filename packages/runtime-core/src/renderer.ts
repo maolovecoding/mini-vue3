@@ -1,5 +1,5 @@
 import { createVnode, Fragment, isSameVnode, Text } from "./vnode";
-import { ShapeFlags, isString, invokeArrayFns } from "@vue/shared";
+import { ShapeFlags, isString, invokeArrayFns, PatchFlags } from "@vue/shared";
 import { getSequence } from "./sequence";
 import { ReactiveEffect } from "@vue/reactivity";
 import { queueJob } from "./scheduler";
@@ -54,7 +54,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       mountElement(n2, container, anchor);
     } else {
       // 更新
-      patchElement(n1, n2, container);
+      patchElement(n1, n2);
     }
   };
   /**
@@ -64,16 +64,40 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
    * @param n2
    * @param el
    */
-  const patchElement = (n1, n2, container) => {
+  const patchElement = (n1, n2) => {
     const el = (n2.el = n1.el);
     // 比较属性
     const oldProps = n1.props || {};
     const newProps = n2.props || {};
-    patchProps(oldProps, newProps, el);
+    // 动态属性
+    const { patchFlag } = n2;
+    // class变化
+    if (patchFlag & PatchFlags.CLASS) {
+      if (oldProps.class !== newProps.class) {
+        hostPatchProp(el, "class", oldProps, newProps);
+      }
+    } else {
+      patchProps(oldProps, newProps, el);
+    }
+
     // TODO 处理文本节点
     // n2 = normalize(n2)
-    // 比较孩子
-    patchChildren(n1, n2, el);
+    // 如果有 dynamicChildren 只比较动态节点
+    if (n2.dynamicChildren?.length) {
+      patchBlockChildren(n1, n2);
+    }
+    // 比较孩子 全量diff
+    else patchChildren(n1, n2, el);
+  };
+  /**
+   * 靶向更新
+   * @param n1
+   * @param n2
+   */
+  const patchBlockChildren = (n1, n2) => {
+    for (let i = 0; i < n2.dynamicChildren.length; i++) {
+      patchElement(n1.dynamicChildren[i], n2.dynamicChildren[i]);
+    }
   };
   const patchProps = (oldProps, newProps, el) => {
     // 新属性直接覆盖旧属性
@@ -360,7 +384,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
           invokeArrayFns(bm);
         }
         // 组件初始化
-        const subTree = (instance.subTree = render.call(proxy)); // 作为this 后续this会修改
+        const subTree = (instance.subTree = render.call(proxy, proxy)); // 作为this 后续this会修改
         patch(null, subTree, container, anchor); // 创造subTree的真实DOM
         instance.isMounted = true;
         if (m) {
@@ -376,7 +400,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
           invokeArrayFns(bu);
         }
         // 更新
-        const subTree = render.call(proxy);
+        const subTree = render.call(proxy, proxy);
         patch(instance.subTree, subTree, container, anchor);
         instance.subTree = subTree;
         if (u) {

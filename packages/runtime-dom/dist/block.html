@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script src="./runtime-dom.global.js"></script>
+  <script>
+    const _Vue = VueRuntimeDOM
+    const { render, h } = VueRuntimeDOM
+    const { createElementVNode: _createElementVNode, toDisplayString: _toDisplayString, openBlock: _openBlock, createElementBlock: _createElementBlock } = _Vue
+    const app = {
+      data() {
+        return {
+          name: "zs"
+        }
+      },
+      render(_ctx) {
+        setTimeout(() => {
+          console.log(1)
+          this.name = "ls"
+        }, 1000)
+        const vnode = (_openBlock(), _createElementBlock("div", null, [
+          _createElementVNode("span", null, "1"),
+          _createElementVNode("span", null, _toDisplayString(_ctx.name), 1 /* TEXT */)
+        ]))
+        console.log(vnode)
+        return vnode;
+      }
+    }
+    render(h(app), document.querySelector("#app"))
+    /**
+     * 模板编译优化 增添了patchFLag来标识那些节点是动态的
+     * block 来收集节点 为不稳定结构也创建了block节点 实现blockTree 做到靶向更新
+     * 优化 （静态提升 属性提升 虚拟节点的提升 函数缓存 预解析字符串）
+     * 写模板的性能比直接写html的性能更好一些
+    */
+  </script>
+</body>
+
+</html>
