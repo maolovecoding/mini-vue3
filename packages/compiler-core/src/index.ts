@@ -12,23 +12,64 @@ export const compile = (template: string) => {
 export const parse = (template: string) => {
   // 创建一个解析上下文 进行处理
   const context = createParserContext(template);
-  const nodes = []; // 存放解析结果
+  const nodes: INode[] = []; // 存放解析结果
   // 1. < 元素 2. {{}}表达式 3. 正常文本
   while (!isEnd(context)) {
     const source = context.source;
-    let node;
+    let node: INode;
     if (source.startsWith("{{")) {
+      debugger;
+      node = parseInterpolation(context);
     } else if (source[0] === "<") {
     }
     // 文本
     if (!node) {
       node = parseText(context);
       debugger;
-      break;
     }
     nodes.push(node);
   }
   return template;
+};
+/**
+ * 解析表达式
+ * @param context
+ */
+const parseInterpolation = (context: ContextType) => {
+  // 起始位置
+  const start = getCursor(context);
+  // 内容的结束位置
+  const closeIndex = context.source.indexOf("}}",2);
+  // 删除 {{
+  advanceBy(context, 2);
+  // 内容的起始和结束位置 在后面会更新
+  const innerStart = getCursor(context);
+  const innerEnd = getCursor(context);
+  // 表达式的长度
+  const rawContentLength = closeIndex - 2;
+  // 拿到表达式
+  const preContent = parseTextData(context, rawContentLength);
+  // 去除开头结尾的空格
+  const content = preContent.trim();
+  // {{  name}} 实际变量的位置
+  const startOffset = preContent.indexOf(content);
+  // 更新表达式实际变量的开始和结束位置
+  if (startOffset > 0) {
+    advancePositionWithMutation(innerStart, preContent, startOffset);
+  }
+  const endOffset = startOffset + content.length;
+  advancePositionWithMutation(innerEnd, preContent, endOffset);
+  // 删除 }}
+  advanceBy(context, 2);
+  return {
+    type: NodeTypes.INTERPOLATION, // 表达式
+    content: {
+      type: NodeTypes.SIMPLE_EXPRESSION,
+      content,
+      loc: getSelection(context, innerStart, innerEnd),
+    },
+    loc: getSelection(context, start),
+  } as INode;
 };
 /**
  * 创建解析上下文
@@ -44,6 +85,7 @@ export const createParserContext = (template: string) => {
     originalSource: template,
   };
 };
+
 /**
  * 解析文本
  * @param context
@@ -64,14 +106,12 @@ const parseText = (context: ContextType) => {
   const start = getCursor(context); // 开始
   // 取内容
   const content = parseTextData(context, endIndex);
-  // 获取结束位置
-
   return {
     type: NodeTypes.TEXT,
     content,
     // 位置信息
     loc: getSelection(context, start),
-  };
+  } as INode;
 };
 /**
  * 获取选中的字符串
@@ -82,18 +122,20 @@ const parseText = (context: ContextType) => {
  */
 const getSelection = (
   context: ContextType,
-  start: {
-    line: number;
-    column: number;
-    offset: number;
-  },
+  start: ILocationMessage,
   end = getCursor(context)
-) => ({
-  start,
-  end,
-  source: context.originalSource.slice(start.offset, end.offset),
-});
-
+) =>
+  ({
+    start,
+    end,
+    source: context.originalSource.slice(start.offset, end.offset),
+  } as ILocation);
+/**
+ * 解析文本内容并返回
+ * @param context
+ * @param endIndex
+ * @returns
+ */
 const parseTextData = (context: ContextType, endIndex: number) => {
   // 截取到的内容
   const rawText = context.source.slice(0, endIndex);
@@ -113,7 +155,7 @@ const advanceBy = (context: ContextType, endIndex: number) => {
   context.source = context.source.slice(endIndex);
 };
 const advancePositionWithMutation = (
-  context: ContextType,
+  context: ILocationMessage,
   source: string,
   endIndex: number
 ) => {
@@ -142,12 +184,27 @@ const advancePositionWithMutation = (
  */
 const getCursor = (context: ContextType) => {
   const { line, column, offset } = context;
-  return { line, column, offset };
+  return { line, column, offset } as ILocationMessage;
 };
-
-type ContextType = ReturnType<typeof createParserContext>;
 
 const isEnd = (context: ContextType) => {
   const source = context.source;
   return !source; //是否解析结束
 };
+type ContextType = ReturnType<typeof createParserContext>;
+
+interface INode {
+  type: NodeTypes;
+  content: string | INode;
+  loc: ILocation;
+}
+interface ILocation {
+  start: ILocationMessage;
+  end: ILocationMessage;
+  source: string;
+}
+interface ILocationMessage {
+  line: number;
+  column: number;
+  offset: number;
+}
