@@ -12,24 +12,122 @@ export const compile = (template: string) => {
 export const parse = (template: string) => {
   // 创建一个解析上下文 进行处理
   const context = createParserContext(template);
-  const nodes: INode[] = []; // 存放解析结果
+  return parseChildren(context);
+};
+/**
+ * 解析孩子
+ * @param context
+ * @returns
+ */
+const parseChildren = (context: ContextType) => {
+  const nodes: (INode | INodeElement)[] = []; // 存放解析结果
   // 1. < 元素 2. {{}}表达式 3. 正常文本
   while (!isEnd(context)) {
     const source = context.source;
-    let node: INode;
+    let node: INode | INodeElement;
     if (source.startsWith("{{")) {
-      debugger;
       node = parseInterpolation(context);
     } else if (source[0] === "<") {
+      node = parseElement(context);
     }
     // 文本
     if (!node) {
       node = parseText(context);
-      debugger;
     }
     nodes.push(node);
   }
-  return template;
+  return nodes;
+};
+/**
+ * 解析元素
+ * @param context
+ */
+const parseElement = (context: ContextType) => {
+  // 解析标签 <div id="app"></div>
+  const ele = parseTag(context);
+  // 解析标签的孩子标签
+  const children = parseChildren(context); // 可能没有儿子
+  // 解析结束标签 </div>
+  if (context.source.startsWith("</")) {
+    parseTag(context);
+  }
+  // 计算最新的位置信息 也就是最新的结束位置
+  ele.loc = getSelection(context, ele.loc.start);
+  ele.children = children;
+  return ele;
+};
+/**
+ * 解析标签
+ * @param context
+ * @returns
+ */
+const parseTag = (context: ContextType) => {
+  const start = getCursor(context);
+  const regexp = /^<\/?([a-z][^ \t\r\n/>]*)/;
+  // 匹配结果
+  const match = regexp.exec(context.source);
+  const tag = match[1];
+  // 删除整个标签开头 <div
+  advanceBy(context, match[0].length);
+  // 去除标签名和属性之间的空格
+  advanceBySpaces(context);
+  // TODO 属性也需要删除
+  const props = parseAttributes(context);
+  // 是否是自闭合标签 <div xxx />
+  const isSelfClosing = context.source.startsWith("/>");
+  advanceBy(context, isSelfClosing ? 2 : 1);
+  return {
+    type: NodeTypes.ELEMENT,
+    tag,
+    props,
+    isSelfClosing,
+    loc: getSelection(context, start),
+  } as INodeElement;
+};
+const parseAttributes = (context: ContextType) => {
+  // a="1" b="2">
+  const props: IProps[] = [];
+  while (context.source.length > 0 && !context.source.startsWith(">")) {
+    const prop = parseAttribute(context);
+    props.push(prop);
+    advanceBySpaces(context);
+  }
+  return props;
+};
+const parseAttribute = (context: ContextType) => {
+  const start = getCursor(context);
+  // 属性名 属性值
+  const propReg = /^[^\t\r\n\f />][^\t\r\n\f />=]*/;
+  const propKey = propReg.exec(context.source)[0];
+  advanceBy(context, propKey.length);
+  advanceBySpaces(context);
+  // 删除 =
+  advanceBy(context, 1);
+  const propValue = parseAttributeValue(context);
+  return {
+    type: NodeTypes.ATTRIBUTE,
+    name: propKey,
+    value: {
+      type: NodeTypes.TEXT,
+      ...propValue,
+    },
+    loc: getSelection(context, start),
+  } as IProps;
+};
+const parseAttributeValue = (context: ContextType) => {
+  const start = getCursor(context);
+  // a="1" b='2'
+  const quote = context.source[0];
+  let content: string;
+  // 区分单引号 双引号
+  if (quote === "'" || quote === '"') {
+    advanceBy(context, 1);
+    const endIndex = context.source.indexOf(quote);
+    // 中间内容就是文本
+    content = parseTextData(context, endIndex);
+    advanceBy(context, 1);
+  }
+  return { content, loc: getSelection(context, start) } as IPropsValue;
 };
 /**
  * 解析表达式
@@ -39,7 +137,7 @@ const parseInterpolation = (context: ContextType) => {
   // 起始位置
   const start = getCursor(context);
   // 内容的结束位置
-  const closeIndex = context.source.indexOf("}}",2);
+  const closeIndex = context.source.indexOf("}}", 2);
   // 删除 {{
   advanceBy(context, 2);
   // 内容的起始和结束位置 在后面会更新
@@ -71,6 +169,7 @@ const parseInterpolation = (context: ContextType) => {
     loc: getSelection(context, start),
   } as INode;
 };
+
 /**
  * 创建解析上下文
  * @param template
@@ -154,6 +253,16 @@ const advanceBy = (context: ContextType, endIndex: number) => {
   // 删除截取的字符串
   context.source = context.source.slice(endIndex);
 };
+/**
+ * 去除空格
+ * @param context
+ */
+const advanceBySpaces = (context: ContextType) => {
+  const match = /^[ \r\t\n]+/.exec(context.source);
+  if (match) {
+    advanceBy(context, match[0].length);
+  }
+};
 const advancePositionWithMutation = (
   context: ILocationMessage,
   source: string,
@@ -168,7 +277,6 @@ const advancePositionWithMutation = (
       linePos = i;
     }
   }
-  debugger;
   context.line += linesCount;
   context.column =
     linePos === -1
@@ -189,6 +297,8 @@ const getCursor = (context: ContextType) => {
 
 const isEnd = (context: ContextType) => {
   const source = context.source;
+  // 防止解析子标签死循环
+  if (source.startsWith("</")) return true;
   return !source; //是否解析结束
 };
 type ContextType = ReturnType<typeof createParserContext>;
@@ -196,6 +306,24 @@ type ContextType = ReturnType<typeof createParserContext>;
 interface INode {
   type: NodeTypes;
   content: string | INode;
+  loc: ILocation;
+}
+interface INodeElement {
+  type: NodeTypes;
+  tag: string;
+  children?: (INode | INodeElement)[];
+  props?: IProps[];
+  isSelfClosing: boolean;
+  loc: ILocation;
+}
+interface IProps {
+  type: NodeTypes;
+  name: string; // 属性名
+  value: { type: NodeTypes; content: string; loc: ILocation };
+  loc: ILocation;
+}
+interface IPropsValue {
+  content: string;
   loc: ILocation;
 }
 interface ILocation {
