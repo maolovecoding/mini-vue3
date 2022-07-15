@@ -12,7 +12,16 @@ export const compile = (template: string) => {
 export const parse = (template: string) => {
   // 创建一个解析上下文 进行处理
   const context = createParserContext(template);
-  return parseChildren(context);
+
+  const start = getCursor(context);
+  return createRoot(parseChildren(context), getSelection(context, start));
+};
+const createRoot = (children: (INode | INodeElement)[], loc: ILocation) => {
+  return {
+    type: NodeTypes.ROOT,
+    children,
+    loc,
+  };
 };
 /**
  * 解析孩子
@@ -36,7 +45,15 @@ const parseChildren = (context: ContextType) => {
     }
     nodes.push(node);
   }
-  return nodes;
+  nodes.forEach((node, index) => {
+    if (node.type === NodeTypes.TEXT) {
+      // 文本是空白字符串
+      if (/^[^\t\r\n\f ]/.test((node as INode).content as string)) {
+        node[index] = null;
+      }
+    }
+  });
+  return nodes.filter(Boolean);
 };
 /**
  * 解析元素
