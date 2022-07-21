@@ -4,6 +4,9 @@
  * @Last Modified by: 毛毛
  * @Last Modified time: 2022-06-26 14:42:39
  */
+
+import { recordEffectScope } from "./effectScope";
+
 /**
  * 传入的副作用函数类型
  * @returns {Function}
@@ -54,7 +57,10 @@ export class ReactiveEffect {
    * @memberof ReactiveEffect
    */
   active = true;
-  constructor(public fn: effectFn, public scheduler?: EffectScheduler) {}
+  constructor(public fn: effectFn, public scheduler?: EffectScheduler) {
+    // effectScope进行收集effect
+    recordEffectScope(this)
+  }
   /**
    *
    * run 方法 就是执行传入的副作用函数

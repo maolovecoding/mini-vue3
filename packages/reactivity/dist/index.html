@@ -10,13 +10,41 @@
 
 <body>
   <div id="app"></div>
-  <!-- <script src="./reactivity.global.js"></script> -->
-  <script src="../../../node_modules/@vue/runtime-dom/dist/runtime-dom.global.js"></script>
+  <script src="./reactivity.global.js"></script>
   <script>
-    // const { effect, reactive, computed, watch } = Vue
-    const { createRenderer ,h} = VueRuntimeDOM
-    const renderer = createRenderer()
-    renderer.render(h("h1","你好"),app)
+    const { effect, reactive, computed, watch, effectScope } = VueReactivity
+    // 声明了响应式数据 数据在effect中使用 依赖收集的过程 我们希望能停止收集依赖
+    const state = reactive({ name: "zs", age: 22 })
+    // const runner = effect(() => {
+    //   console.log(state.name)
+    // })
+    // 停止依赖收集
+    // runner.effect.stop()
+    // setTimeout(() => {
+    //   state.name = "ls"
+    // }, 1000)
+
+    // 作用域scope effect
+    const scope = effectScope()
+    // effectScope 需要收集对应的effect
+    scope.run(() => {
+      effect(() => {
+        console.log(state.name, "outer")
+      })
+      // true 表示是独立的scope 
+      const innerScope = effectScope(true)
+      innerScope.run(() => {
+        effect(() => {
+          console.log(state.name, "inner")
+        })
+      })
+      innerScope.stop()
+    })
+    // 停止依赖收集 是批量停止依赖收集 状态记住管理 一次性可以全部停止
+    // scope.stop() // 如果嵌套的子scope不是独立的 也会停止依赖收集
+    setTimeout(() => {
+      state.name = "ls"
+    }, 1000)
   </script>
 </body>
 

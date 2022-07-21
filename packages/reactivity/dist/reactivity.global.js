@@ -22,11 +22,14 @@ var VueReactivity = (() => {
   __export(src_exports, {
     ReactiveEffect: () => ReactiveEffect,
     activeEffect: () => activeEffect,
+    activeEffectScope: () => activeEffectScope,
     computed: () => computed,
     effect: () => effect,
+    effectScope: () => effectScope,
     isReactive: () => isReactive,
     proxyRefs: () => proxyRefs,
     reactive: () => reactive,
+    recordEffectScope: () => recordEffectScope,
     ref: () => ref,
     toRef: () => toRef,
     toRefs: () => toRefs,
@@ -44,6 +47,50 @@ var VueReactivity = (() => {
   };
   var isArray = Array.isArray;
 
+  // packages/reactivity/src/effectScope.ts
+  var activeEffectScope = null;
+  var effectScope = (detached = false) => {
+    return new EffectScope(detached);
+  };
+  var EffectScope = class {
+    constructor(detached) {
+      this.active = true;
+      this.parent = null;
+      this.effects = [];
+      this.scopes = [];
+      if (!detached && activeEffectScope) {
+        activeEffectScope.scopes.push(this);
+      }
+    }
+    run(fn) {
+      if (this.active) {
+        try {
+          this.parent = activeEffectScope;
+          activeEffectScope = this;
+          return fn();
+        } finally {
+          activeEffectScope = this.parent;
+        }
+      }
+    }
+    stop() {
+      if (this.active) {
+        for (let i = 0; i < this.effects.length; i++) {
+          this.effects[i].stop();
+        }
+        for (let i = 0; i < this.scopes.length; i++) {
+          this.scopes[i].stop();
+        }
+        this.active = false;
+      }
+    }
+  };
+  var recordEffectScope = (effect2) => {
+    if (activeEffectScope == null ? void 0 : activeEffectScope.active) {
+      activeEffectScope.effects.push(effect2);
+    }
+  };
+
   // packages/reactivity/src/effect.ts
   function effect(fn, options) {
     const _effect = new ReactiveEffect(fn, options == null ? void 0 : options.scheduler);
@@ -60,6 +107,7 @@ var VueReactivity = (() => {
       this.parent = null;
       this.deps = [];
       this.active = true;
+      recordEffectScope(this);
     }
     run() {
       let res;
