@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script src="./runtime-dom.global.js"></script>
+  <script>
+    const _Vue = VueRuntimeDOM
+    const { render, h, reactive, KeepAlive, onMounted } = VueRuntimeDOM
+    const { createElementVNode: _createElementVNode,
+      toDisplayString: _toDisplayString,
+      openBlock: _openBlock,
+      createElementBlock: _createElementBlock } = _Vue
+
+    const cmp1 = {
+      name: "cmp1",
+      setup() {
+        onMounted(() => {
+          console.log("cmp1 mounted")
+        })
+      },
+      render() {
+        return h("div", ["cmp1"])
+      }
+    }
+    const cmp2 = {
+      name: "cmp2",
+      setup() {
+        onMounted(() => {
+          console.log("cmp2 mounted")
+        })
+      },
+      render() {
+        return h("div", ["cmp2"])
+      }
+    }
+    const cmp3 = {
+      name: "cmp3",
+      setup() {
+        onMounted(() => {
+          console.log("cmp3 mounted")
+        })
+      },
+      render() {
+        return h("div", ["cmp3"])
+      }
+    }
+    render(h(KeepAlive, {
+      max: 2,
+      // include: ["cmp1", "cmp2"]
+    }, { default: () => h(cmp1) }), document.querySelector("#app"))
+    setTimeout(() => {
+      render(h(KeepAlive, {
+        max: 2,
+        // include: ["cmp1", "cmp2"]
+      }, { default: () => h(cmp2) }), document.querySelector("#app"))
+    }, 1000)
+    setTimeout(() => {
+      render(h(KeepAlive, {
+        max: 2,
+        // include: ["cmp1", "cmp2"]
+      }, { default: () => h(cmp3) }), document.querySelector("#app"))
+    }, 2000)
+    setTimeout(() => {
+      render(h(KeepAlive, {
+        max: 2,
+        // include: ["cmp1", "cmp2"]
+      }, { default: () => h(cmp1) }), document.querySelector("#app"))
+    }, 3000)
+  </script>
+</body>
+
+</html>

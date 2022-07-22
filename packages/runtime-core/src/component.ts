@@ -14,6 +14,7 @@ export const createComponentInstance = (vnode, parent) => {
   // pinia 也是把数据直接通过reactive变成响应式的
   // 组件实例
   const instance = {
+    ctx: {} as any, // 实例上下文对象 keep-alive中使用
     parent, // 记住父组件
     provides: parent ? parent.provides : Object.create(null), // 引用一份父组件的 provide到自身
     data: null, // 组件自身的状态数据

@@ -1,3 +1,4 @@
+import { isKeepAlive } from "./components/KeepAlive";
 import { createVnode, Fragment, isSameVnode, Text } from "./vnode";
 import { ShapeFlags, isString, invokeArrayFns, PatchFlags } from "@vue/shared";
 import { getSequence } from "./sequence";
@@ -133,7 +134,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       // 1. 新 文本 老 数组
       if (prevShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
         // 卸载所有子节点
-        unmountChildren(c1);
+        unmountChildren(c1, parentComponent);
       }
       // 2. 新旧 都是文本   旧子节点是空
       if (c1 !== c2) {
@@ -145,11 +146,11 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         if (nextShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
           // TODO  diff
           // 全量更新
-          patchKeyedChildren(c1, c2, el);
+          patchKeyedChildren(c1, c2, el, parentComponent);
         } else {
           // 5. 新节点是空 删除所有儿子
           // 6. 或者删除文本
-          unmountChildren(c1);
+          unmountChildren(c1, parentComponent);
         }
       } else {
         // 4. 数组 文本 清空文本 创建新的子节点
@@ -168,7 +169,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
    * @param c2
    * @param el
    */
-  const patchKeyedChildren = (c1, c2, el) => {
+  const patchKeyedChildren = (c1, c2, el, parentComponent = null) => {
     let i = 0; // 两个子节点的头指针
     let e1 = c1.length - 1;
     let e2 = c2.length - 1;
@@ -266,9 +267,9 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
    * 卸载所有DOM节点
    * @param children
    */
-  const unmountChildren = (children) => {
+  const unmountChildren = (children, parentComponent = null) => {
     for (let i = 0; i < children.length; i++) {
-      unmount(children[i]);
+      unmount(children[i], parentComponent);
     }
   };
 
@@ -290,7 +291,10 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     parentComponent = null
   ) => {
     if (n1 == null) {
-      mountComponent(n2, container, anchor, parentComponent);
+      // TODO 组件激活
+      if (n2.shapeFlag & ShapeFlags.COMPONENT_KEPT_ALIVE) {
+        parentComponent.ctx.activate(n2.component, container, anchor);
+      } else mountComponent(n2, container, anchor, parentComponent);
     } else {
       // 组件更新 靠的是props
       updateComponent(n1, n2);
@@ -320,10 +324,10 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
   const shouldUpdateComponent = (n1, n2) => {
     const { props: prevProps, children: prevChildren } = n1;
     const { props: nextProps, children: nextChildren } = n2;
+    // 插槽 有孩子必须要更新
+    if (prevChildren || nextChildren) return true;
     // props
     if (prevProps === nextProps) return false;
-    // 插槽
-    if (prevChildren || nextChildren) return true;
     return hasPropsChanged(prevProps, nextProps);
   };
 
@@ -345,7 +349,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     if (n1 === n2) return;
     if (n1 && !isSameVnode(n1, n2)) {
       // 不是同一类型的节点 直接卸载 然后重新创建
-      unmount(n1);
+      unmount(n1, parentComponent);
       n1 = null;
     }
     const { type, shapeFlag } = n2;
@@ -399,6 +403,15 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       vnode,
       parentComponent
     ));
+    // TODO kee-alive的处理方式
+    if (isKeepAlive(vnode)) {
+      instance.ctx.renderer = {
+        createElement: hostCreateElement, // 创建元素
+        move(vnode, container, anchor) {
+          hostInsert(vnode.component.subTree.el, container, anchor);
+        },
+      };
+    }
     // 2. 给实例上赋值
     setupComponent(instance);
     // 3. 创建组件渲染函数的effect
@@ -415,6 +428,8 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     instance.next = null;
     instance.vnode = next; // 更新渲染的vdom
     updateProps(instance.props, next.props); // 更新props
+    // 更新插槽
+    Object.assign(instance.slots, next.children);
   };
   const setupRenderEffect = (instance, container, anchor = null) => {
     // const { proxy, render } = instance;
@@ -514,13 +529,17 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
       return (children[index] = createVnode(Text, null, children[index]));
     return children[index];
   };
-  const unmount = (vnode) => {
+  const unmount = (vnode, parentComponent = null) => {
     if (vnode.type === Fragment) {
-      return unmountChildren(vnode);
+      return unmountChildren(vnode, parentComponent);
+    }
+    if (vnode.shapeFlag & ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE) {
+      // 不卸载组件
+      return parentComponent.ctx.deactivate(vnode); // 把虚拟节点给keep-alive的deactivate方法
     }
     if (vnode.shapeFlag & ShapeFlags.COMPONENT) {
       // 卸载组件
-      return unmountChildren(vnode.component.subTree.children);
+      return unmountChildren(vnode.component.subTree.children, parentComponent);
     }
     // 卸载真实DOM
     hostRemove(vnode.el);
