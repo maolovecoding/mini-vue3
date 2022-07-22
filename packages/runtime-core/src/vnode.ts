@@ -10,6 +10,7 @@ import {
   isArray,
   isObject,
   PatchFlags,
+  isFunction,
 } from "@vue/shared";
 import { isTeleport } from "./components";
 /**
@@ -40,7 +41,9 @@ export const createVnode = (
   const shapeFlag = isString(type)
     ? ShapeFlags.ELEMENT
     : isTeleport(type)
-    ? ShapeFlags.TELEPORT// 是teleport
+    ? ShapeFlags.TELEPORT // 是teleport
+    : isFunction(type) // 函数组件
+    ? ShapeFlags.FUNCTIONAL_COMPONENT
     : isObject(type) // 是组件
     ? ShapeFlags.STATEFUL_COMPONENT
     : 0;

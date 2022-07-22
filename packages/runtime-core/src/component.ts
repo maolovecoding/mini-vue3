@@ -1,4 +1,4 @@
-import { isFunction, hasOwn, isObject } from "@vue/shared";
+import { isFunction, hasOwn, isObject, ShapeFlags } from "@vue/shared";
 import { proxyRefs, reactive } from "@vue/reactivity";
 import { initProps } from "./componentProps";
 import { initSlots } from "./componentSlots";
@@ -142,4 +142,14 @@ export const hasPropsChanged = (prevProps = {}, nextProps = {}) => {
     if (nextProps[key] !== prevProps[key]) return true;
   }
   return false;
+};
+
+export const renderComponent = (instance) => {
+  const { vnode, render, proxy, props } = instance;
+  if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+    // 有状态组件
+    return render.call(proxy, proxy);
+  }
+  // 函数组件
+  return vnode.type(props);
 };

@@ -6,6 +6,7 @@ import { queueJob } from "./scheduler";
 import {
   createComponentInstance,
   hasPropsChanged,
+  renderComponent,
   setupComponent,
   updateProps,
 } from "./component";
@@ -416,7 +417,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     updateProps(instance.props, next.props); // 更新props
   };
   const setupRenderEffect = (instance, container, anchor = null) => {
-    const { proxy, render } = instance;
+    // const { proxy, render } = instance;
     /**
      * 区分组件是挂载 还是更新
      */
@@ -427,7 +428,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
           invokeArrayFns(bm);
         }
         // 组件初始化
-        const subTree = (instance.subTree = render.call(proxy, proxy)); // 作为this 后续this会修改
+        const subTree = (instance.subTree = renderComponent(instance)); // 作为this 后续this会修改
         patch(null, subTree, container, anchor, instance); // 创造subTree的真实DOM
         instance.isMounted = true;
         if (m) {
@@ -443,7 +444,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
           invokeArrayFns(bu);
         }
         // 更新
-        const subTree = render.call(proxy, proxy);
+        const subTree = renderComponent(instance);
         patch(instance.subTree, subTree, container, anchor, instance);
         instance.subTree = subTree;
         if (u) {

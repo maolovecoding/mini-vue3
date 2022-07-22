@@ -57,6 +57,7 @@ var VueRuntimeDOM = (() => {
     recordEffectScope: () => recordEffectScope,
     ref: () => ref,
     render: () => render,
+    renderComponent: () => renderComponent,
     setCurrentInstance: () => setCurrentInstance,
     setupBlock: () => setupBlock,
     setupComponent: () => setupComponent,
@@ -236,7 +237,7 @@ var VueRuntimeDOM = (() => {
   var Text = Symbol("text");
   var Fragment = Symbol("fragment");
   var createVnode = (type, props, children = null, patchFlag = 0) => {
-    const shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
+    const shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isFunction(type) ? 2 /* FUNCTIONAL_COMPONENT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
     let key;
     if (props == null ? void 0 : props.key) {
       key = props.key;
@@ -702,6 +703,9 @@ var VueRuntimeDOM = (() => {
     }
     instance.props = reactive(props);
     instance.attrs = attrs;
+    if (instance.vnode.shapeFlag & 2 /* FUNCTIONAL_COMPONENT */) {
+      instance.props = attrs;
+    }
   };
 
   // packages/runtime-core/src/componentSlots.ts
@@ -823,6 +827,13 @@ var VueRuntimeDOM = (() => {
         return true;
     }
     return false;
+  };
+  var renderComponent = (instance) => {
+    const { vnode, render: render2, proxy, props } = instance;
+    if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
+      return render2.call(proxy, proxy);
+    }
+    return vnode.type(props);
   };
 
   // packages/runtime-core/src/renderer.ts
@@ -1064,14 +1075,13 @@ var VueRuntimeDOM = (() => {
       updateProps(instance.props, next.props);
     };
     const setupRenderEffect = (instance, container, anchor = null) => {
-      const { proxy, render: render3 } = instance;
       const componentUpdate = () => {
         if (!instance.isMounted) {
           const { bm, m } = instance;
           if (bm) {
             invokeArrayFns(bm);
           }
-          const subTree = instance.subTree = render3.call(proxy, proxy);
+          const subTree = instance.subTree = renderComponent(instance);
           patch(null, subTree, container, anchor, instance);
           instance.isMounted = true;
           if (m) {
@@ -1085,7 +1095,7 @@ var VueRuntimeDOM = (() => {
           if (bu) {
             invokeArrayFns(bu);
           }
-          const subTree = render3.call(proxy, proxy);
+          const subTree = renderComponent(instance);
           patch(instance.subTree, subTree, container, anchor, instance);
           instance.subTree = subTree;
           if (u) {

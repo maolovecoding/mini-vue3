@@ -1,5 +1,5 @@
 import { reactive } from "@vue/reactivity";
-import { hasOwn, isArray } from "@vue/shared";
+import { hasOwn, isArray, ShapeFlags } from "@vue/shared";
 /*
  * @Author: 毛毛
  * @Date: 2022-06-29 14:50:26
@@ -30,7 +30,8 @@ export const initProps = (instance, rawProps) => {
       if (options[key] !== null) {
         if (
           // name:{type:String}
-          (options[key].type && !(Object(value) instanceof options[key].type)) ||
+          (options[key].type &&
+            !(Object(value) instanceof options[key].type)) ||
           // name:String
           !(Object(value) instanceof options[key])
         ) {
@@ -46,4 +47,8 @@ export const initProps = (instance, rawProps) => {
   // TODO props是浅层响应式的 这里应该属性 shadowReactive
   instance.props = reactive(props);
   instance.attrs = attrs; // 开发环境attrs是浅层响应式 生产环境 就是一个普通对象
+  // TODO props是组件中的 如果是函数式组件 应该用attrs作为props
+  if (instance.vnode.shapeFlag & ShapeFlags.FUNCTIONAL_COMPONENT) {
+    instance.props = attrs;
+  }
 };
