@@ -7,11 +7,12 @@ import { createRenderer } from "@vue/runtime-core";
 const renderOptions = Object.assign({}, nodeOps, { patchProp });
 /**
  * 定义的渲染器 浏览器使用
- * @param vnode 
- * @param container 
+ * @param vnode
+ * @param container
  */
 export const render = (vnode, container) => {
   createRenderer(renderOptions).render(vnode, container);
 };
 
 export * from "@vue/runtime-core";
+export * from "@vue/reactivity";

@@ -10,10 +10,12 @@ export const setCurrentInstance = (instance) => {
 };
 export const getCurrentInstance = () => currentInstance;
 
-export const createComponentInstance = (vnode) => {
+export const createComponentInstance = (vnode, parent) => {
   // pinia 也是把数据直接通过reactive变成响应式的
   // 组件实例
   const instance = {
+    parent, // 记住父组件
+    provides: parent ? parent.provides : Object.create(null), // 引用一份父组件的 provide到自身
     data: null, // 组件自身的状态数据
     vnode, // 组件自身的虚拟节点
     subTree: null, // 组件的渲染内容 vdom
@@ -75,7 +77,8 @@ export const setupComponent = (
       // 是对象 就是作为render函数会用到的属性
       instance.setupState = proxyRefs<any>(setupResult as any); // 取消 ref的.value
     }
-  } else instance.render = type.render;
+  }
+  if (!isFunction(instance.render)) instance.render = type.render;
 };
 
 const publicInstanceProxyHandler = {

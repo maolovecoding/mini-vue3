@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script src="./runtime-dom.global.js"></script>
+  <script>
+    const _Vue = VueRuntimeDOM
+    const { render, h, reactive, getCurrentInstance, inject, provide } = VueRuntimeDOM
+    const { createElementVNode: _createElementVNode,
+      toDisplayString: _toDisplayString,
+      openBlock: _openBlock,
+      createElementBlock: _createElementBlock } = _Vue
+    // 实现原理 在父组件上增加了一个provides属性 当调用provide时候会像属性中存值
+    // 在渲染子组件的时候 子组件也会将父组件的provides属性放在自己身上
+    const My = {
+      setup() {
+        const state = inject("obj")
+        const instance = getCurrentInstance()
+        console.log(instance)
+        return {
+          state
+        }
+      },
+      render() {
+        return h("h1", this.state.name)
+      }
+    }
+    const app = {
+      setup() {
+        const state = reactive({ name: "zs" })
+        provide("obj", state)
+        setTimeout(() => { state.name = 'ls' }, 2000)
+      },
+      render() {
+        return h(My)
+      }
+    }
+    render(h(app), document.querySelector("#app"))
+  </script>
+</body>
+
+</html>
