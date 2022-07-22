@@ -11,6 +11,7 @@ import {
   isObject,
   PatchFlags,
 } from "@vue/shared";
+import { isTeleport } from "./components";
 /**
  * 判断两个节点是否是相同节点 （是否可复用）
  * @param n1
@@ -38,6 +39,8 @@ export const createVnode = (
   // 组合方案 shapeFlag 一个元素中包含的是多个儿子 还是一个儿子
   const shapeFlag = isString(type)
     ? ShapeFlags.ELEMENT
+    : isTeleport(type)
+    ? ShapeFlags.TELEPORT// 是teleport
     : isObject(type) // 是组件
     ? ShapeFlags.STATEFUL_COMPONENT
     : 0;

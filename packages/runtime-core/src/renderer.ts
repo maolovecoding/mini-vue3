@@ -364,6 +364,19 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
         else if (shapeFlag & ShapeFlags.COMPONENT) {
           // 组件类型
           processComponent(n1, n2, container, anchor, parentComponent);
+        } else if (shapeFlag & ShapeFlags.TELEPORT) {
+          // 是teleport类型组件
+          type.process(n1, n2, container, anchor, {
+            mountChildren,
+            patchChildren,
+            move(vnode, container) {
+              hostInsert(
+                // 组件 还是 vnode
+                vnode.component ? vnode.component.subTree.el : vnode.el,
+                container
+              );
+            },
+          });
         }
     }
   };

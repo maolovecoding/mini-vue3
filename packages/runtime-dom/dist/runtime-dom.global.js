@@ -23,6 +23,7 @@ var VueRuntimeDOM = (() => {
     Fragment: () => Fragment,
     LifeCycle: () => LifeCycle,
     ReactiveEffect: () => ReactiveEffect,
+    Teleport: () => TeleportImpl,
     Text: () => Text,
     activeEffect: () => activeEffect,
     activeEffectScope: () => activeEffectScope,
@@ -42,6 +43,7 @@ var VueRuntimeDOM = (() => {
     inject: () => inject,
     isReactive: () => isReactive,
     isSameVnode: () => isSameVnode,
+    isTeleport: () => isTeleport,
     isVnode: () => isVnode,
     onBeforeMount: () => onBeforeMount,
     onBeforeUpdate: () => onBeforeUpdate,
@@ -205,6 +207,27 @@ var VueRuntimeDOM = (() => {
     }
   };
 
+  // packages/runtime-core/src/components/Teleport.ts
+  var TeleportImpl = {
+    __isTeleport: true,
+    process(n1, n2, container, anchor, internals) {
+      const { mountChildren, patchChildren, move } = internals;
+      if (!n1) {
+        const target = document.querySelector(n2.props.to);
+        if (target) {
+          mountChildren(n2.children, target);
+        }
+      } else {
+        patchChildren(n1, n2, container);
+        if (n2.props.to !== n1.props.to) {
+          const nextTarget = document.querySelector(n2.props.to);
+          n2.children.forEach((child) => move(child, nextTarget));
+        }
+      }
+    }
+  };
+  var isTeleport = (type) => type.__isTeleport;
+
   // packages/runtime-core/src/vnode.ts
   var isSameVnode = (n1, n2) => {
     return n1.type === n2.type && n1.key === n2.key;
@@ -212,7 +235,7 @@ var VueRuntimeDOM = (() => {
   var Text = Symbol("text");
   var Fragment = Symbol("fragment");
   var createVnode = (type, props, children = null, patchFlag = 0) => {
-    const shapeFlag = isString(type) ? 1 /* ELEMENT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
+    const shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
     let key;
     if (props == null ? void 0 : props.key) {
       key = props.key;
@@ -1018,6 +1041,14 @@ var VueRuntimeDOM = (() => {
             processElement(n1, n2, container, anchor, parentComponent);
           else if (shapeFlag & 6 /* COMPONENT */) {
             processComponent(n1, n2, container, anchor, parentComponent);
+          } else if (shapeFlag & 64 /* TELEPORT */) {
+            type.process(n1, n2, container, anchor, {
+              mountChildren,
+              patchChildren,
+              move(vnode, container2) {
+                hostInsert(vnode.component ? vnode.component.subTree.el : vnode.el, container2);
+              }
+            });
           }
       }
     };
