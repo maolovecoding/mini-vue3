@@ -1,7 +1,11 @@
 import { isObject, isArray } from "@vue/shared";
 import { createVnode, isVnode } from "./vnode";
 
-export const h = function h(type: string, propsOrChildren, children) {
+export const h = function h(
+  type: string | symbol,
+  propsOrChildren?,
+  children?
+) {
   const l = arguments.length;
   if (l === 2) {
     if (isObject(propsOrChildren) && !isArray(propsOrChildren)) {

@@ -35,6 +35,7 @@ var VueRuntimeDOM = (() => {
     createRenderer: () => createRenderer,
     createVnode: () => createVnode,
     currentInstance: () => currentInstance,
+    defineAsyncComponent: () => defineAsyncComponent,
     effect: () => effect,
     effectScope: () => effectScope,
     getCurrentInstance: () => getCurrentInstance,
@@ -1123,6 +1124,12 @@ var VueRuntimeDOM = (() => {
       return children[index];
     };
     const unmount = (vnode) => {
+      if (vnode.type === Fragment) {
+        return unmountChildren(vnode);
+      }
+      if (vnode.shapeFlag & 6 /* COMPONENT */) {
+        return unmountChildren(vnode.component.subTree.children);
+      }
       hostRemove(vnode.el);
     };
     const render2 = (vnode, container) => {
@@ -1209,6 +1216,63 @@ var VueRuntimeDOM = (() => {
       return provides[key];
     }
     return defaultValue;
+  };
+
+  // packages/runtime-core/src/defineAsyncComponent.ts
+  var defineAsyncComponent = (options) => {
+    if (isFunction(options)) {
+      options = { loader: options };
+    }
+    return {
+      setup() {
+        const loaded = ref(false);
+        const error = ref(false);
+        const delayLoading = ref(false);
+        const {
+          loader,
+          timeout = Infinity,
+          delay = 200,
+          loadingComponent,
+          errorComponent,
+          onError
+        } = options;
+        setTimeout(() => {
+          if (!loaded.value) {
+            error.value = true;
+          }
+        }, timeout);
+        setTimeout(() => {
+          if (!loaded.value) {
+            delayLoading.value = true;
+          }
+        }, delay);
+        let Cmp;
+        const load = () => {
+          return loader().catch((err) => {
+            if (onError) {
+              return new Promise((resolve, reject) => {
+                const retry = () => resolve(load());
+                const fail = () => reject(err);
+                onError(err, retry, fail);
+              });
+            }
+          });
+        };
+        load().then((cmp) => {
+          Cmp = cmp;
+          loaded.value = true;
+        }).catch().finally(() => delayLoading.value = false);
+        return () => {
+          if (loaded.value && Cmp)
+            return h(Cmp);
+          if (error.value && errorComponent)
+            return h(errorComponent);
+          if (delayLoading.value && loadingComponent)
+            return h(loadingComponent);
+          return h(Fragment, []);
+        };
+      }
+    };
   };
 
   // packages/runtime-dom/src/index.ts

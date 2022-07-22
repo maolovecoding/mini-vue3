@@ -495,6 +495,7 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
    * @param el
    */
   const mountChildren = (children, el, parentComponent = null) => {
+    // if (children == null) return; // TODO Fragment 孩子可能为null的情况
     for (let i = 0; i < children.length; i++) {
       // TODO 如果孩子是一个普通文本 "hello" 包装 返回 让字符串变成字符串的虚拟DOM
       const child = normalize(children, i);
@@ -513,6 +514,13 @@ export const createRenderer = (renderOptions: RenderOptions<any>) => {
     return children[index];
   };
   const unmount = (vnode) => {
+    if (vnode.type === Fragment) {
+      return unmountChildren(vnode);
+    }
+    if (vnode.shapeFlag & ShapeFlags.COMPONENT) {
+      // 卸载组件
+      return unmountChildren(vnode.component.subTree.children);
+    }
     // 卸载真实DOM
     hostRemove(vnode.el);
   };
